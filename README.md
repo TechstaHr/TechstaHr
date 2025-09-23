@@ -11,7 +11,7 @@ This repository contains my implementation of the three assigned features.
 - Generate reports of attendance and time logs.  
 
  2. Screenshot
-- Capture employee screenshots at intervals.  
+- Capture employee screenshots at intervals(when team members clock in, clock out).  
 - Store screenshots for attendance verification.  
 - Integrate with timesheet records for monitoring.  
 
@@ -19,8 +19,3 @@ This repository contains my implementation of the three assigned features.
 - Automate salary calculation based on timesheet data.  
 - Handle overtime, deductions, and bonuses.  
 - Generate payslips and payroll reports.  
-
- Setup Instructions
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/IsraelDcoder/techstarhq.git
