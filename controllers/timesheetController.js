@@ -6,7 +6,7 @@ const Project = require('../models/Project');
 exports.clockIn = async (req, res) => {
   try {
     const { projectId } = req.body;
-    const userId = req.user._id;
+    const userId = req.user.id;
 
     
     const user = await User.findById(userId);
@@ -107,7 +107,7 @@ exports.approveTimesheet = async (req, res) => {
 
 exports.getMyTimesheets = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
 
     const timesheets = await TimeEntry.find({ user: userId })
       .populate('project', 'name')
