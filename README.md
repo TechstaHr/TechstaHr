@@ -19,3 +19,20 @@ This repository contains my implementation of the three assigned features.
 - Automate salary calculation based on timesheet data.  
 - Handle overtime, deductions, and bonuses.  
 - Generate payslips and payroll reports.  
+
+## Dev setup locally
+- create account on [cloudinary.com](https://cloudinary.com) to get the api key and secrets
+- create account on [https://cloud.mongodb.com](https://cloud.mongodb.com) to get database connection url
+- Create a .env file, copy the one in .env.example. Replace the value.
+- Run it `npm start`. It's avaibale at: `http://0.0.0.0:3001/api/v1/`
+- create an account `http://0.0.0.0:3001/api/v1/signup`.
+Sample payload:
+```
+{
+	"email": "me@gmail.com",
+	"password": "hshs123",
+	"full_name": "John Doe ",
+	"team_name": "My Team"
+}
+```
+
