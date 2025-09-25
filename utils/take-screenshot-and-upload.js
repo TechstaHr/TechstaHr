@@ -81,6 +81,21 @@ const takeScreenshotAndUpload = async (task) => {
                     task.nextScreenshotAt = new Date(Date.now() + task.screenshotIntervalMinutes * 60000);
                     task.screenshotHistory.push(result.secure_url);
                     await task.save();
+
+                    // attach screenshot to current open TimeEntry for this task owner + project
+                    try {
+                        const TimeEntry = require('../models/TimeEntry');
+                        const entry = await TimeEntry.findOne({ user: task.owner, project: task.project, endTime: null });
+                        if (entry) {
+                            const item = { url: result.secure_url, takenAt: new Date() };
+                            entry.screenshots = (entry.screenshots || []).concat([item]);
+                            await entry.save();
+                            console.log(`🔗 Attached screenshot to TimeEntry ${entry._id}`);
+                        }
+                    } catch (attachErr) {
+                        console.warn('Could not attach screenshot to TimeEntry:', attachErr.message);
+                    }
+
                     console.log(`✅ Screenshot saved for task "${task.title}"`);
                     resolve(result.secure_url);
                 } catch (err) {

@@ -5,8 +5,8 @@ const Project = require('../models/Project');
 
 exports.clockIn = async (req, res) => {
   try {
-    const { projectId } = req.body;
-    const userId = req.user.id;
+  const { projectId } = req.body;
+  const userId = req.user._id || req.user.id;
 
     
     const user = await User.findById(userId);
@@ -16,8 +16,9 @@ exports.clockIn = async (req, res) => {
     if (!project) return res.status(404).json({ message: 'Project not found' });
 
     
-    const existing = await TimeEntry.findOne({ user: userId, project: projectId, endTime: null });
-    if (existing) return res.status(400).json({ message: 'Already clocked in for this project' });
+  // prevent multiple open clock-ins across any project for the same user
+  const existing = await TimeEntry.findOne({ user: userId, endTime: null });
+  if (existing) return res.status(400).json({ message: 'Already clocked in. Please clock out first.' });
 
     const entry = new TimeEntry({
       user: userId,
@@ -41,21 +42,28 @@ exports.clockOut = async (req, res) => {
   try {
     const { entryId } = req.body;
 
-    const entry = await TimeEntry.findById(entryId)
-      .populate('user', 'name email')
-      .populate('project', 'name');
+    // allow clocking out by entryId or by the current open entry
+    let entry;
+    if (entryId) {
+      entry = await TimeEntry.findById(entryId).populate('user', 'name email').populate('project', 'name');
+    } else {
+      const userId = req.user._id || req.user.id;
+      entry = await TimeEntry.findOne({ user: userId, endTime: null }).populate('user', 'name email').populate('project', 'name');
+    }
 
-    if (!entry || entry.endTime) return res.status(400).json({ message: 'No active clock-in found' });
+    if (!entry) return res.status(400).json({ message: 'No active clock-in found' });
+    if (entry.endTime) return res.status(400).json({ message: 'This entry is already clocked out' });
 
     entry.endTime = new Date();
 
-    
     const ms = entry.endTime - entry.startTime;
     const hours = ms / (1000 * 60 * 60);
 
-    entry.totalHours = hours;
-    entry.regularHours = Math.min(hours, 8);
-    entry.overtimeHours = hours > 8 ? hours - 8 : 0;
+    // round to 2 decimal places for readability and payroll accuracy
+    const totalHours = Number(hours.toFixed(2));
+    entry.totalHours = totalHours;
+    entry.regularHours = Number(Math.min(totalHours, 8).toFixed(2));
+    entry.overtimeHours = Number((totalHours > 8 ? totalHours - 8 : 0).toFixed(2));
 
     await entry.save();
     res.json(entry);
@@ -69,10 +77,17 @@ exports.clockOut = async (req, res) => {
 
 exports.submitTimesheet = async (req, res) => {
   try {
-    const { entryId } = req.body;
+  const { entryId } = req.body;
 
-    const entry = await TimeEntry.findById(entryId);
-    if (!entry) return res.status(404).json({ message: 'Timesheet not found' });
+  const entry = await TimeEntry.findById(entryId);
+  if (!entry) return res.status(404).json({ message: 'Timesheet not found' });
+
+  // only owner can submit
+  const requesterId = req.user._id || req.user.id;
+  if (String(entry.user) !== String(requesterId)) return res.status(403).json({ message: 'Not authorized to submit this timesheet' });
+
+    // must be clocked out before submission
+    if (!entry.endTime) return res.status(400).json({ message: 'Please clock out before submitting timesheet' });
 
     entry.status = 'submitted';
     await entry.save();
@@ -107,7 +122,7 @@ exports.approveTimesheet = async (req, res) => {
 
 exports.getMyTimesheets = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user._id || req.user.id;
 
     const timesheets = await TimeEntry.find({ user: userId })
       .populate('project', 'name')
@@ -134,5 +149,38 @@ exports.getAllTimesheets = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error fetching all timesheets', error: error.message });
+  }
+};
+
+
+exports.getActiveEntry = async (req, res) => {
+  try {
+  const userId = req.user._id || req.user.id;
+  const entry = await TimeEntry.findOne({ user: userId, endTime: null }).populate('project', 'name');
+    if (!entry) return res.status(404).json({ message: 'No active entry' });
+    res.json(entry);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error fetching active entry', error: error.message });
+  }
+};
+
+
+exports.attachScreenshots = async (req, res) => {
+  try {
+    const { entryId, screenshots } = req.body; // screenshots: [url1, url2, ...]
+    if (!entryId || !Array.isArray(screenshots)) return res.status(400).json({ message: 'entryId and screenshots[] are required' });
+
+    const entry = await TimeEntry.findById(entryId);
+    if (!entry) return res.status(404).json({ message: 'Entry not found' });
+
+  const items = screenshots.map(u => ({ url: u, takenAt: new Date() }));
+  entry.screenshots = (entry.screenshots || []).concat(items);
+    await entry.save();
+
+    res.json({ message: 'Screenshots attached', entry });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error attaching screenshots', error: error.message });
   }
 };

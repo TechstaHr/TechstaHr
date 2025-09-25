@@ -75,4 +75,28 @@ module.exports = {
     setScreenshotSettings,
     stopScreenshot,
     getTaskScreenshots,
+    getEntryScreenshots: async (req, res) => {
+        try {
+            const { entryId } = req.params;
+            const TimeEntry = require('../models/TimeEntry');
+
+            const entry = await TimeEntry.findById(entryId).populate('user', 'name email').populate('project', 'name');
+            if (!entry) return res.status(404).json({ message: 'Timesheet entry not found.' });
+
+            // allow owner or admin
+            if (!(req.user && (String(req.user._id) === String(entry.user._id) || req.user.role === 'admin'))) {
+                return res.status(403).json({ message: 'Not authorized to view screenshots for this entry.' });
+            }
+
+            res.status(200).json({
+                entryId: entry._id,
+                user: entry.user,
+                project: entry.project,
+                screenshots: entry.screenshots || []
+            });
+        } catch (err) {
+            console.error('Error fetching entry screenshots:', err.message);
+            res.status(500).json({ message: 'Internal server error' });
+        }
+    }
 };
