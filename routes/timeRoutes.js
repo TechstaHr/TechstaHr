@@ -23,6 +23,7 @@ router.post('/clock-out', authMiddleware, timesheetController.clockOut);
 router.post('/submit', authMiddleware, timesheetController.submitTimesheet);
 router.get('/my', authMiddleware, timesheetController.getMyTimesheets);
 router.get('/active', authMiddleware, timesheetController.getActiveEntry);
+router.get('/report', authMiddleware, authorizeAdmin || adminCheck, timesheetController.generateReport);
 router.post('/attach-screenshots', authMiddleware, timesheetController.attachScreenshots);
 
 const adminCheck = authorizeAdmin || ((req, res, next) => { if (req.user && req.user.role === 'admin') return next(); return res.status(403).json({ error: 'Admins only' }); });

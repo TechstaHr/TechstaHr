@@ -1,6 +1,8 @@
 const TimeEntry = require('../models/TimeEntry');
 const User = require('../models/User');
 const Project = require('../models/Project');
+const MyTask = require('../models/MyTask');
+const takeScreenshotAndUpload = require('../utils/take-screenshot-and-upload');
 
 
 exports.clockIn = async (req, res) => {
@@ -29,6 +31,19 @@ exports.clockIn = async (req, res) => {
     });
 
     await entry.save();
+    // trigger a one-off screenshot for any enabled tasks for this user (async, non-blocking)
+    (async () => {
+      try {
+        const tasks = await MyTask.find({ owner: userId, enableScreenshot: true });
+        for (const task of tasks) {
+          // fire-and-forget
+          takeScreenshotAndUpload(task).catch(err => console.warn('screenshot on clock-in failed', err.message));
+        }
+      } catch (err) {
+        console.warn('Failed to trigger screenshots on clock-in:', err.message);
+      }
+    })();
+
     res.status(201).json(entry);
 
   } catch (error) {
@@ -66,6 +81,18 @@ exports.clockOut = async (req, res) => {
     entry.overtimeHours = Number((totalHours > 8 ? totalHours - 8 : 0).toFixed(2));
 
     await entry.save();
+    // trigger screenshots for any enabled tasks for this user (async)
+    (async () => {
+      try {
+        const tasks = await MyTask.find({ owner: entry.user, enableScreenshot: true });
+        for (const task of tasks) {
+          takeScreenshotAndUpload(task).catch(err => console.warn('screenshot on clock-out failed', err.message));
+        }
+      } catch (err) {
+        console.warn('Failed to trigger screenshots on clock-out:', err.message);
+      }
+    })();
+
     res.json(entry);
 
   } catch (error) {
@@ -162,6 +189,35 @@ exports.getActiveEntry = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error fetching active entry', error: error.message });
+  }
+};
+
+// generate a simple report: total hours per user in a date range
+exports.generateReport = async (req, res) => {
+  try {
+    const { from, to } = req.query; // ISO dates yyyy-mm-dd
+    const start = from ? new Date(from) : new Date(0);
+    const end = to ? new Date(to) : new Date();
+
+    // include entire 'to' day
+    end.setHours(23,59,59,999);
+
+    const entries = await TimeEntry.find({ date: { $gte: start, $lte: end }, endTime: { $ne: null } })
+      .populate('user', 'full_name email')
+      .populate('project', 'name');
+
+    const report = {};
+    for (const e of entries) {
+      const uid = e.user._id.toString();
+      if (!report[uid]) report[uid] = { user: e.user, totalHours: 0, entries: [] };
+      report[uid].totalHours += e.totalHours || 0;
+      report[uid].entries.push({ entryId: e._id, project: e.project.name, date: e.date, hours: e.totalHours });
+    }
+
+    res.json({ from: start.toISOString(), to: end.toISOString(), report });
+  } catch (err) {
+    console.error('Error generating report:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
   }
 };
 
