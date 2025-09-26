@@ -93,7 +93,6 @@ const uploadScreenshot = async (req, res) => {
       }
     });
     if (!timeEntry) {
-      console.log({ message: "No time entry found for this task." })
       return res.status(404).json({ message: "No time entry found for this task." })
     }
     const { image } = req.body;
