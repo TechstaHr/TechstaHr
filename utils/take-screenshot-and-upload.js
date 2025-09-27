@@ -96,16 +96,21 @@ const takeScreenshotAndUpload = async (task) => {
                         // timestamp when screenshot was taken
                         const takenAt = new Date();
 
+                        // 0) Prefer an open entry (user is currently clocked in)
+                        let entry = await TimeEntry.findOne({ user: task.owner, project: task.project, endTime: null }).sort({ startTime: -1 });
+
                         // 1) Prefer an entry that overlaps the screenshot timestamp (startTime <= takenAt <= endTime OR endTime == null)
-                        let entry = await TimeEntry.findOne({
-                            user: task.owner,
-                            project: task.project,
-                            startTime: { $lte: takenAt },
-                            $or: [
-                                { endTime: null },
-                                { endTime: { $gte: takenAt } }
-                            ]
-                        }).sort({ startTime: -1 });
+                        if (!entry) {
+                            entry = await TimeEntry.findOne({
+                                user: task.owner,
+                                project: task.project,
+                                startTime: { $lte: takenAt },
+                                $or: [
+                                    { endTime: null },
+                                    { endTime: { $gte: takenAt } }
+                                ]
+                            }).sort({ startTime: -1 });
+                        }
 
                         // 2) Fallback: same UTC day
                         if (!entry) {
