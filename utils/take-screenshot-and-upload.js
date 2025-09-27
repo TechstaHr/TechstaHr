@@ -93,19 +93,33 @@ const takeScreenshotAndUpload = async (task) => {
                     // attach screenshot to current open TimeEntry for this task owner + project
                     try {
                         const TimeEntry = require('../models/TimeEntry');
-                        // Prefer the TimeEntry for the same UTC day (normalized) for this user+project.
-                        const now = new Date();
-                        const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+                        // timestamp when screenshot was taken
+                        const takenAt = new Date();
 
-                        let entry = await TimeEntry.findOne({ user: task.owner, project: task.project, day: day });
+                        // 1) Prefer an entry that overlaps the screenshot timestamp (startTime <= takenAt <= endTime OR endTime == null)
+                        let entry = await TimeEntry.findOne({
+                            user: task.owner,
+                            project: task.project,
+                            startTime: { $lte: takenAt },
+                            $or: [
+                                { endTime: null },
+                                { endTime: { $gte: takenAt } }
+                            ]
+                        }).sort({ startTime: -1 });
 
-                        // Fallback: use the most recent entry for this user+project if exact day match not found
+                        // 2) Fallback: same UTC day
+                        if (!entry) {
+                            const day = new Date(Date.UTC(takenAt.getUTCFullYear(), takenAt.getUTCMonth(), takenAt.getUTCDate()));
+                            entry = await TimeEntry.findOne({ user: task.owner, project: task.project, day: day });
+                        }
+
+                        // 3) Final fallback: most recent entry for user+project
                         if (!entry) {
                             entry = await TimeEntry.findOne({ user: task.owner, project: task.project }).sort({ createdAt: -1 });
                         }
 
                         if (entry) {
-                            const item = { url: result.secure_url, takenAt: new Date() };
+                            const item = { url: result.secure_url, takenAt };
                             entry.screenshots = (entry.screenshots || []).concat([item]);
                             await entry.save();
                             console.log(`🔗 Attached screenshot to TimeEntry ${entry._id}`);
