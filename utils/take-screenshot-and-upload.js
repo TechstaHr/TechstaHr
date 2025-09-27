@@ -11,23 +11,31 @@ const RETRY_LIMIT = 2;
 
 const takeScreenshotAndUpload = async (task) => {
     try {
-        await install({
-            browser: 'chrome',
-            buildId: CHROME_BUILD_ID,
-            cacheDir: CHROME_CACHE_DIR,
-        });
+        let executablePath;
+        try {
+            await install({
+                browser: 'chrome',
+                buildId: CHROME_BUILD_ID,
+                cacheDir: CHROME_CACHE_DIR,
+            });
 
-        const executablePath = await computeExecutablePath({
-            browser: 'chrome',
-            buildId: CHROME_BUILD_ID,
-            cacheDir: CHROME_CACHE_DIR,
-        });
+            executablePath = await computeExecutablePath({
+                browser: 'chrome',
+                buildId: CHROME_BUILD_ID,
+                cacheDir: CHROME_CACHE_DIR,
+            });
+        } catch (installErr) {
+            console.warn('Could not install/compute Chrome executable path, falling back to default puppeteer.launch():', installErr.message);
+            executablePath = undefined;
+        }
 
-        const browser = await puppeteer.launch({
-            executablePath,
+        const launchOptions = {
             headless: 'new',
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        });
+        };
+        if (executablePath) launchOptions.executablePath = executablePath;
+
+        const browser = await puppeteer.launch(launchOptions);
 
         const page = await browser.newPage();
         page.setDefaultNavigationTimeout(SCREENSHOT_TIMEOUT);
@@ -85,7 +93,17 @@ const takeScreenshotAndUpload = async (task) => {
                     // attach screenshot to current open TimeEntry for this task owner + project
                     try {
                         const TimeEntry = require('../models/TimeEntry');
-                        const entry = await TimeEntry.findOne({ user: task.owner, project: task.project, endTime: null });
+                        // Prefer the TimeEntry for the same UTC day (normalized) for this user+project.
+                        const now = new Date();
+                        const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+                        let entry = await TimeEntry.findOne({ user: task.owner, project: task.project, day: day });
+
+                        // Fallback: use the most recent entry for this user+project if exact day match not found
+                        if (!entry) {
+                            entry = await TimeEntry.findOne({ user: task.owner, project: task.project }).sort({ createdAt: -1 });
+                        }
+
                         if (entry) {
                             const item = { url: result.secure_url, takenAt: new Date() };
                             entry.screenshots = (entry.screenshots || []).concat([item]);
