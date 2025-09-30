@@ -17,6 +17,22 @@ const billingInfoSchema = new mongoose.Schema({
         state: { type: String, required: true },
         postalCode: { type: String, required: true },
         country: { type: String, required: true }
+    },
+    bankDetail: {
+        currency: { type: String, required: true },
+        accountName: { type: String, required: true },
+        accountNumber: { type: String, required: true },
+        bankId: {
+            type: mongoose.Schema.Types.ObjectId,
+            required: true,
+            ref: 'Bank',
+            unique: true
+        },
+    },
+    payRate: {
+        type: String,
+        enum: ['hourly', 'weekly', 'monthly'],
+        required: true
     }
 }, { timestamps: true });
 

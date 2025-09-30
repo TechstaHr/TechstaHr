@@ -1,4 +1,7 @@
 const axios = require('axios');
+const flutterwaveUtils = require('../utils/flutterwave');
+const Payroll = require('../models/Payroll');
+const Bank = require('../models/Bank');
 
 const PAYSTACK_SECRET_KEY = process.env.PYS_SECRET_KEY;
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
@@ -59,6 +62,42 @@ const verifyPayment = async (req, res) => {
             error: error.response?.data || error.message,
         });
     }
+};
+
+const triggerPayment = async (req, res) => {
+  try {
+    const { payrollId } = req.params;
+    const existingPayroll = Payroll.findById(payrollId);
+    if (!existingPayroll) {
+      return res.status(404).json({ message: "Payroll entry not found." });
+    }
+    const existingBank = Bank.findById(existingPayroll.bankId);
+    if (!existingBank) {
+      return res.status(404).json({ message: "Bank not found." });
+    }
+    const existingBillingInfo = BillingInfo.findOne({ userId: existingPayroll.userId });
+    if (!existingBillingInfo) {
+      return res.status(404).json({ message: "No billing info found for user." });
+    }
+    data = {
+      currency: existingBank.currency,
+      paymentAmount: existingPayroll.paymentAmount,
+      bank: {
+        code: existingBank.code,
+      },
+      bankDetail: existingBillingInfo.bankDetail
+      userId: existingPayroll.userId,
+      traceId: existingPayroll.traceId,
+      idempotencyKey: existingPayroll.idempotencyKey,
+    };
+    const response = await flutterwaveUtils.directTransfer(data);
+    res.status(200).json(response);
+  } catch (err) {
+    res.status(500).json({
+      message: 'Payment trigger failed',
+      error: err,
+    });
+  }
 };
 
 module.exports = {
