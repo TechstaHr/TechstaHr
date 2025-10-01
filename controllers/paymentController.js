@@ -85,7 +85,7 @@ const triggerPayment = async (req, res) => {
       bank: {
         code: existingBank.code,
       },
-      bankDetail: existingBillingInfo.bankDetail
+      bankDetail: existingBillingInfo.bankDetail,
       userId: existingPayroll.userId,
       traceId: existingPayroll.traceId,
       idempotencyKey: existingPayroll.idempotencyKey,
