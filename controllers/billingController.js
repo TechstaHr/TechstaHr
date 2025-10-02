@@ -32,6 +32,7 @@ const createPayroll = async (req, res) => {
     const newPayroll = new Payroll({
       traceId: new mongoose.Types.ObjectId(),
       idempotencyKey: new mongoose.Types.ObjectId(),
+      trxReference: new mongoose.Types.ObjectId(),
       ...req.body
     });
     await newPayroll.save();
@@ -44,9 +45,12 @@ const createPayroll = async (req, res) => {
 const updatePayroll = async (req, res) => {
   try {
     const existingPayroll = await Payroll.findById(req.params.id);
-    if (existingPayroll.paymentStatus !== "scheduled") {
+    if (existingPayroll.paymentStatus === "scheduled" || existingPayroll.paymentStatus === "failed") {
       res.status(403).json({ message: "Can only update scheduled payment" });
     }
+    delete req.body.traceId;
+    delete req.body.idempotencyKey;
+    delete req.body.trxReference;
     Object.assign(existingPayroll, req.body);
     await existingPayroll.save();
 
