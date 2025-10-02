@@ -1,8 +1,8 @@
 const axios = require('axios');
 
-const FLW_CLIENT_ID = process.env.FLW_PUBLIC_KEY
-const FLW_CLIENT_SECRET = process.env.FLW_SECRET_KEY
-const FLW_BASE_URL = 'https://api.flutterwave.cloud/';
+const FLW_CLIENT_ID = process.env.FLW_CLIENT_ID
+const FLW_CLIENT_SECRET = process.env.FLW_CLIENT_SECRET
+const FLW_BASE_URL = process.env.FLW_BASE_URL;
 let accessToken = null;
 let expiresIn = 0; // token expiry time in seconds
 let lastTokenRefreshTime = 0;
@@ -67,7 +67,7 @@ const directTransfer = async (data) => {
         destination_currency: data.currency,
       },
       type: 'bank',
-      reference: `trx_${data.userId}_${Date.now()}`
+      reference: data.reference,
     }
 
     const response = await axios.post(
@@ -77,18 +77,18 @@ const directTransfer = async (data) => {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
-          'X-Trace-Id': data.TraceId,
+          'X-Trace-Id': data.traceId,
           'X-Idempotency-Key': data.idempotencyKey
         }
       }
     );
     return {
-      status: response.status,
-      message: response.message
+      status: response.data.status,
+      message: response.data.message,
     }
   } catch (err) {
-    console.error('Transfer initiation error:', err);
-    throw err;
+    console.error('Transfer initiation error:', err.response.data);
+    throw err.response.data;
   }
 };
 
