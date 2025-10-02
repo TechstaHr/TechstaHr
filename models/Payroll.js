@@ -24,6 +24,7 @@ const PayrollSchema = new mongoose.Schema({
   paymentGateway: { type: String, required: true },
   traceId: { type: String, required: true },
   idempotencyKey: { type: String, required: true },
+  trxReference: { type: String, required: true },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Payroll', PayrollSchema);
