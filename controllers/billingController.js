@@ -10,13 +10,51 @@ const addBank = async (req, res) => {
     if (existing) return res.status(409).json({ message: 'Bank already exist' });
 
     const newBank = new Bank({...req.body});
+    console.log('New Bank Created:', newBank);
     await newBank.save();
-
-    res.status(201).json(newBank);
+    res.status(201).json({
+      message: "Bank created successfully",
+      bank: newBank,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
+
+const getBank = async (req, res) => {
+  try {
+    const bank = await Bank.findById(req.params.id);
+    if (!bank) return res.status(404).json({ message: 'Bank not found' });
+    res.status(200).json(bank);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const updateBank = async (req, res) => {
+  try {
+    const bank = await Bank.findById(req.params.id);
+    if (!bank) return res.status(404).json({ message: 'Bank not found' });
+
+    Object.assign(bank, req.body);
+    await bank.save();
+    res.status(200).json(bank);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const deleteBank = async (req, res) => {
+  try {
+    const bank = await Bank.findById(req.params.id);
+    if (!bank) return res.status(404).json({ message: 'Bank not found' });
+
+    await bank.remove();
+    res.status(200).json({ message: 'Bank deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
 
 const getBanks = async (req, res) => {
   try {
@@ -111,4 +149,7 @@ module.exports = {
     getBanks,
     createPayroll,
     updatePayroll,
+    getBank,
+    deleteBank,
+    updateBank
 }

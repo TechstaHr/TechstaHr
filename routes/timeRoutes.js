@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-
+const { authorizeAdmin } = require('../middlewares/authMiddleware');
 const timesheetController = require('../controllers/timesheetController');
 
 let authMiddleware;
@@ -21,7 +21,7 @@ router.post('/clock-out', authMiddleware, timesheetController.clockOut);
 router.post('/submit', authMiddleware, timesheetController.submitTimesheet);
 router.get('/my', authMiddleware, timesheetController.getMyTimesheets);
 
-router.post('/approve', authMiddleware, timesheetController.approveTimesheet);
-router.get('/all', authMiddleware, timesheetController.getAllTimesheets);
+router.post('/approve', authMiddleware, authorizeAdmin, timesheetController.approveTimesheet);
+router.get('/all', authMiddleware, authorizeAdmin,timesheetController.getAllTimesheets);
 
 module.exports = router;

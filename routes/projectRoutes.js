@@ -3,7 +3,7 @@ const router = express.Router();
 const projectCtrl = require('../controllers/projectController');
 const { authenticateToken, authorizeAdmin } = require('../middlewares/authMiddleware');
 
-router.post('/', authenticateToken, projectCtrl.createProject);
+router.post('/', authenticateToken, authorizeAdmin, projectCtrl.createProject);
 
 router.get('/project-stats', authenticateToken, projectCtrl.getProjectStats);
 router.get('/my-projects', authenticateToken, projectCtrl.getMyProjects);
