@@ -73,52 +73,65 @@ const getTaskScreenshots = async (req, res) => {
     }
 };
 
-const uploadScreenshot = async (req, res) => {
+const generateUploadSignature = async (req, res) => {
   try {
     const { taskId } = req.params;
-    const task = await MyTask.findById(taskId)
-    if (!task) {
-      return res.status(404).json({ message: "Task not found." });
+    if (!taskId) {
+      return res.status(400).json({ message: "Task ID is required." });
     }
+
     const userId = req.user.id;
+    const folderName = `Techstahr/screenshots/tasks/${taskId}/${userId}`;
+    const timestamp = Math.round((new Date).getTime() / 1000);
+    const signature = cloudinary.utils.api_sign_request(
+      {
+        timestamp: timestamp,
+        folder: folderName,
+      },
+      process.env.CLOUDINARY_API_SECRET
+    );
+
+    res.status(200).json({
+      message: "Upload signature generated successfully",
+      uploadSignature: {
+        timestamp,
+        signature,
+        folder: folderName,
+        apiKey: process.env.CLOUDINARY_API_KEY,
+      },
+    });
+  } catch (err) {
+    console.error("Error generating upload signature:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const notifyUploadCompletion = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const { imageUrl } = req.body;
+    const userId = req.user.id;
+    const task = await MyTask.findById(taskId);
+    if (!task) return res.status(404).json({ message: "Task not found." });
+
     const today = new Date();
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const endofDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
     const timeEntry = await TimeEntry.findOne({
       user: userId,
       project: task.project,
-      date: {
-        $gte: startOfDay,
-        $lt: endofDay
-      }
+      date: { $gte: startOfDay }
     });
-    if (!timeEntry) {
-      return res.status(404).json({ message: "No time entry found for this task." })
-    }
-    const { image } = req.body;
-    if (!image) {
-      return res.status(400).json({ message: "No image data provided." });
-    }
-    const timestamp = new Date().getTime();
-    const folderName = `tasks/${taskId}/${userId}`;
-    const result = await cloudinary.uploader.upload(
-      image,
-      {
-        asset_folder:folderName,
-        folder:folderName,
-      }
-    );
-    task.lastScreenshotUrl = result.secure_url;
-    task.screenshotHistory.push(result.secure_url);
-    timeEntry.screenshots.push(result.secure_url);
+    if (!timeEntry) return res.status(404).json({ message: "No time entry found." });
+    task.lastScreenshotUrl = imageUrl;
+    task.screenshotHistory.push(imageUrl);
+    timeEntry.screenshots.push(imageUrl);
+    
     await task.save();
     await timeEntry.save();
-    res.status(200).json({
-      message: 'Image uploaded successfully',
-      imageUrl: result.secure_url,
-    });
+
+    res.status(200).json({ message: 'Screenshot URL saved successfully.' });
   } catch (err) {
-    console.error("Error occurred while uploading screenshot:", err);
+    console.error("Error saving screenshot URL:", err);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -127,5 +140,6 @@ module.exports = {
     setScreenshotSettings,
     stopScreenshot,
     getTaskScreenshots,
-    uploadScreenshot
+    generateUploadSignature,
+    notifyUploadCompletion
 };

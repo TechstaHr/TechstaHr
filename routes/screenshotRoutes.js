@@ -6,6 +6,7 @@ const { authenticateToken } = require('../middlewares/authMiddleware');
 router.put('/:taskId/screenshot-settings', authenticateToken, screenshotCtrl.setScreenshotSettings);
 router.put('/:taskId/stop-screenshot', authenticateToken, screenshotCtrl.stopScreenshot);
 router.get('/:taskId/screenshots', authenticateToken, screenshotCtrl.getTaskScreenshots);
-router.post('/:taskId/upload-screenshot', authenticateToken, screenshotCtrl.uploadScreenshot);
+router.post('/:taskId/generate-upload-signature', authenticateToken, screenshotCtrl.generateUploadSignature);
+router.post('/:taskId/notify-upload-completion', authenticateToken, screenshotCtrl.notifyUploadCompletion);
 
 module.exports = router;
