@@ -36,3 +36,57 @@ Sample payload:
 }
 ```
 
+
+### Same screenshot upload from the frontend
+```
+// Example frontend function
+async function uploadScreenshotToServer(screenshotFile, taskId) {
+  try {
+    // Step 1: Get the signature from your backend
+    const signatureResponse = await fetch('/screenshot/${taskId}/generate-upload-signature', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${your_auth_token}` },
+      body: JSON.stringify({ taskId }),
+    });
+    const { uploadSignature } = await signatureResponse.json();
+	const { timestamp, signature, folder, apiKey } = uploadSignature;
+
+    // Step 2: Prepare form data for Cloudinary
+    const formData = new FormData();
+    formData.append('file', screenshotFile); // The actual file object, not base64!
+    formData.append('api_key', apiKey);
+    formData.append('timestamp', timestamp);
+    formData.append('signature', signature);
+    formData.append('folder', folder);
+
+    // Step 3: Upload DIRECTLY to Cloudinary
+    const cloudinaryCloudName = 'your-cloud-name'; // Replace with your Cloudinary cloud name
+    const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudinaryCloudName}/image/upload`;
+    
+    const cloudinaryResponse = await fetch(cloudinaryUrl, {
+      method: 'POST',
+      body: formData,
+    });
+    const uploadResult = await cloudinaryResponse.json();
+
+    if (!uploadResult.secure_url) {
+      throw new Error('Upload to Cloudinary failed.');
+    }
+
+    // Step 4: Notify backend that the upload is complete
+    await fetch('/screenshot/${taskId}/notify-upload-completion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${your_auth_token}` },
+      body: JSON.stringify({
+        taskId: taskId,
+        imageUrl: uploadResult.secure_url,
+      }),
+    });
+    
+    console.log('Screenshot successfully uploaded and saved!');
+
+  } catch (error) {
+    console.error('Screenshot upload process failed:', error);
+  }
+}
+```
