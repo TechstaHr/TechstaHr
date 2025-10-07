@@ -81,20 +81,22 @@ const createProject = async (req, res) => {
         const html = ReactDOMServer.renderToStaticMarkup(
           ProjectAssignedEmail({
             full_name: member.full_name,
-            projectName: name,
+            projectName: newProject.name,
           })
         );
 
-        await sendEmail({
-          to: member.email,
-          subject: `You've been added to project "${name}"`,
-          html,
-        });
+        // The sendEmail call has been commented out as requested:
+        // await sendEmail({
+        //   to: member.email,
+        //   subject: `You've been added to project "${newProject.name}"`,
+        //   html,
+        // });
       }
     }
 
+    // populate the nested user object for teamMembers and return once
     const populatedProject = await Project.findById(newProject._id)
-      .populate("teamMembers", "full_name email role")
+      .populate({ path: "teamMembers.user", select: "full_name email role" })
       .populate("tasks");
 
     res.status(201).json({
@@ -147,6 +149,7 @@ const assignTeamMembers = async (req, res) => {
     );
     await project.save();
 
+    // notify each newly added member
     for (const member of members) {
       const settings = await NotificationSettings.findOne({ user: member._id });
 
@@ -178,16 +181,18 @@ const assignTeamMembers = async (req, res) => {
           })
         );
 
-        await sendEmail({
-          to: member.email,
-          subject: `You've been added to project "${project.name}"`,
-          html,
-        });
+        // The sendEmail call has been commented out as requested:
+        // await sendEmail({
+        //   to: member.email,
+        //   subject: `You've been added to project "${project.name}"`,
+        //   html,
+        // });
       }
     }
 
+    // respond once after all notifications/emails are handled
     const updated = await Project.findById(project._id).populate(
-      "teamMembers",
+      "teamMembers.user",
       "full_name email"
     );
     res
@@ -495,7 +500,7 @@ const updateProjectProgress = async (req, res) => {
       { _id: id, team: req.user.team },
       updateFields,
       { new: true }
-    ).populate("teamMembers");
+    ).populate("teamMembers.user", "full_name email"); // changed to populate nested user
 
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
@@ -694,7 +699,7 @@ const getAllProjectProgress = async (req, res) => {
     const projects = await Project.find(
       { team: req.user.team },
       "name progress status teamMembers"
-    ).populate("teamMembers", "full_name email");
+    ).populate("teamMembers.user", "full_name email"); // changed to populate nested user
 
     res.status(200).json({ projects });
   } catch (error) {

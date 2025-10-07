@@ -14,23 +14,31 @@ const RETRY_LIMIT = 2;
 // to the server via the /:taskId/upload-screenshot endpoint
 const takeScreenshotAndUpload = async (task) => {
     try {
-        await install({
-            browser: 'chrome',
-            buildId: CHROME_BUILD_ID,
-            cacheDir: CHROME_CACHE_DIR,
-        });
+        let executablePath;
+        try {
+            await install({
+                browser: 'chrome',
+                buildId: CHROME_BUILD_ID,
+                cacheDir: CHROME_CACHE_DIR,
+            });
 
-        const executablePath = await computeExecutablePath({
-            browser: 'chrome',
-            buildId: CHROME_BUILD_ID,
-            cacheDir: CHROME_CACHE_DIR,
-        });
+            executablePath = await computeExecutablePath({
+                browser: 'chrome',
+                buildId: CHROME_BUILD_ID,
+                cacheDir: CHROME_CACHE_DIR,
+            });
+        } catch (installErr) {
+            console.warn('Could not install/compute Chrome executable path, falling back to default puppeteer.launch():', installErr.message);
+            executablePath = undefined;
+        }
 
-        const browser = await puppeteer.launch({
-            executablePath,
+        const launchOptions = {
             headless: 'new',
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        });
+        };
+        if (executablePath) launchOptions.executablePath = executablePath;
+
+        const browser = await puppeteer.launch(launchOptions);
 
         const page = await browser.newPage();
         page.setDefaultNavigationTimeout(SCREENSHOT_TIMEOUT);
@@ -84,6 +92,50 @@ const takeScreenshotAndUpload = async (task) => {
                     task.nextScreenshotAt = new Date(Date.now() + task.screenshotIntervalMinutes * 60000);
                     task.screenshotHistory.push(result.secure_url);
                     await task.save();
+
+                    // attach screenshot to current open TimeEntry for this task owner + project
+                    try {
+                        const TimeEntry = require('../models/TimeEntry');
+                        // timestamp when screenshot was taken
+                        const takenAt = new Date();
+
+                        // 0) Prefer an open entry (user is currently clocked in)
+                        let entry = await TimeEntry.findOne({ user: task.owner, project: task.project, endTime: null }).sort({ startTime: -1 });
+
+                        // 1) Prefer an entry that overlaps the screenshot timestamp (startTime <= takenAt <= endTime OR endTime == null)
+                        if (!entry) {
+                            entry = await TimeEntry.findOne({
+                                user: task.owner,
+                                project: task.project,
+                                startTime: { $lte: takenAt },
+                                $or: [
+                                    { endTime: null },
+                                    { endTime: { $gte: takenAt } }
+                                ]
+                            }).sort({ startTime: -1 });
+                        }
+
+                        // 2) Fallback: same UTC day
+                        if (!entry) {
+                            const day = new Date(Date.UTC(takenAt.getUTCFullYear(), takenAt.getUTCMonth(), takenAt.getUTCDate()));
+                            entry = await TimeEntry.findOne({ user: task.owner, project: task.project, day: day });
+                        }
+
+                        // 3) Final fallback: most recent entry for user+project
+                        if (!entry) {
+                            entry = await TimeEntry.findOne({ user: task.owner, project: task.project }).sort({ createdAt: -1 });
+                        }
+
+                        if (entry) {
+                            const item = { url: result.secure_url, takenAt };
+                            entry.screenshots = (entry.screenshots || []).concat([item]);
+                            await entry.save();
+                            console.log(`🔗 Attached screenshot to TimeEntry ${entry._id}`);
+                        }
+                    } catch (attachErr) {
+                        console.warn('Could not attach screenshot to TimeEntry:', attachErr.message);
+                    }
+
                     console.log(`✅ Screenshot saved for task "${task.title}"`);
                     resolve(result.secure_url);
                 } catch (err) {
