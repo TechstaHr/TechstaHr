@@ -58,7 +58,6 @@ exports.clockOut = async (req, res) => {
     entry.overtimeHours = hours > 8 ? hours - 8 : 0;
 
     await entry.save();
-    // res.json(entry);
     res.status(200).json({
       message: "Clocked out successfully",
       entry: entry
