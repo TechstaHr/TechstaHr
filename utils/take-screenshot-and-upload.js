@@ -9,6 +9,9 @@ const CHROME_CACHE_DIR = path.resolve(__dirname, '../chrome');
 const SCREENSHOT_TIMEOUT = 60000;
 const RETRY_LIMIT = 2;
 
+// The functions in this file are irrelevant Because screenshots should
+// be taken from the client side using HTML2Canvas and then uploaded 
+// to the server via the /:taskId/upload-screenshot endpoint
 const takeScreenshotAndUpload = async (task) => {
     try {
         await install({
