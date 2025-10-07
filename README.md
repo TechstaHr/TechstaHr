@@ -37,7 +37,7 @@ Sample payload:
 ```
 
 
-### Same screenshot upload from the frontend
+### Sample screenshot upload from the frontend
 ```
 // Example frontend function
 async function uploadScreenshotToServer(screenshotFile, taskId) {
