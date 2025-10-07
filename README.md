@@ -42,7 +42,7 @@ Sample payload:
 // Example frontend function
 async function uploadScreenshotToServer(screenshotFile, taskId) {
   try {
-    // Step 1: Get the signature from your backend
+    // Step 1: Get the signature from the backend
     const signatureResponse = await fetch('/screenshot/${taskId}/generate-upload-signature', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${your_auth_token}` },
@@ -60,7 +60,7 @@ async function uploadScreenshotToServer(screenshotFile, taskId) {
     formData.append('folder', folder);
 
     // Step 3: Upload DIRECTLY to Cloudinary
-    const cloudinaryCloudName = 'your-cloud-name'; // Replace with your Cloudinary cloud name
+    const cloudinaryCloudName = 'Techstahr'; // Replace with Techstahr cloud name
     const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudinaryCloudName}/image/upload`;
     
     const cloudinaryResponse = await fetch(cloudinaryUrl, {
