@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const Team = require("../models/Team");
+const TokenBlacklist = require("../models/TokenBlacklist");
 const OtpEmail = require("../emails/OtpEmail.jsx");
 const InviteEmail = require("../emails/InviteEmail.jsx");
 const sendEmail = require("../services/send-email");
@@ -347,13 +348,19 @@ const login = async (req, res) => {
 const logout = async (req, res) => {
     try {
         const userId = req.user.id;
+        const token = req.headers.authorization?.split(' ')[1];
+        
         if (!userId) {
             return res.status(401).json({ message: "Unauthorized access." });
         }
 
-        await User.findByIdAndUpdate(userId, { isOnline: false });
-
-        res.status(200).json({ message: "Logout successful" });
+        await User.findByIdAndUpdate(userId, { isOnline: false, lastLogout: new Date()});
+        await TokenBlacklist.create({ 
+            userId,
+            token, 
+            expiresAt: req.user.exp * 1000
+        });
+        res.status(200).json({ message: "Logout successful", clearToken: true });
     } catch (error) {
         console.error("Error during logout:", error);
         res.status(500).json({ message: "Internal server error" });

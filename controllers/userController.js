@@ -7,11 +7,19 @@ const getAllUser = async (req, res) => {
     try {
         const teamId = req.user.team;
 
-        const users = await User.find({ team: teamId }).select('-password');
-        res.json({ users });
+        const users = await User.find({ team: teamId })
+            .select('-password -otp -otpExpiresAt')
+            .populate('team', 'name')
+            .sort({ role: 1, createdAt: -1 }); // Sort by role, then by creation date
+
+        res.json({ 
+            users,
+            count: users.length,
+            teamId: teamId
+        });
     } catch (error) {
         console.error("Error getting users:", error);
-        res.status(500).json({ message: "Internal server error", error });
+        res.status(500).json({ message: "Internal server error", error: error.message });
     }
 };
 
