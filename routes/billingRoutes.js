@@ -12,6 +12,7 @@ router.patch('/banks/update/:id', authenticateToken, authorizeAdmin, billingCtrl
 router.delete('/banks/delete/:id', authenticateToken, authorizeAdmin, billingCtrl.deleteBank);
 router.get('/banks', billingCtrl.getBanks);
 router.post('/payroll', authenticateToken, authorizeAdmin, billingCtrl.createPayroll);
+router.get('/payroll/:id', authenticateToken, authorizeAdmin, billingCtrl.getPayroll);
 router.post('/payroll/update/:id', authenticateToken, authorizeAdmin, billingCtrl.updatePayroll);
 
 module.exports = router;

@@ -98,6 +98,17 @@ const updatePayroll = async (req, res) => {
   }
 };
 
+const getPayroll = async (req, res) => {
+  try {
+    const existingPayroll = await Payroll.findById(req.params.id);
+    if (!existingPayroll) return res.status(404).json({ message: 'Payroll not found' });
+
+    res.status(200).json(existingPayroll);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 const createBilling = async (req, res) => {
     try {
         const existing = await BillingInfo.findOne({ userId: req.user.id });
@@ -149,6 +160,7 @@ module.exports = {
     getBanks,
     createPayroll,
     updatePayroll,
+    getPayroll,
     getBank,
     deleteBank,
     updateBank

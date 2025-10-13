@@ -4,7 +4,9 @@ const takeScreenshotAndUpload = require('../utils/take-screenshot-and-upload');
 const MyTask = require('../models/MyTask');
 dotenv.config();
 
-cron.schedule('* * * * *', async () => {
+
+if (process.env.ENABLE_SCREENSHOT_CRON === 'true') {
+    cron.schedule('* * * * *', async () => {
     const now = new Date();
 
     console.log(`[⏰] Running screenshot job at ${now.toISOString()}`);
@@ -32,4 +34,7 @@ cron.schedule('* * * * *', async () => {
     } catch (err) {
         console.error("❌ Failed to fetch tasks:", err.message);
     }
-});
+    });
+} else {
+    console.log('📴 Screenshot cron job is disabled');
+}   

@@ -5,14 +5,14 @@ const userCtrl = require('../controllers/userController');
 const { authenticateToken, authorizeAdmin } = require('../middlewares/authMiddleware');
 const upload = require('../middlewares/upload');
 
-router.get('/users', authenticateToken, userCtrl.getAllUser);
+router.get('/users', authenticateToken, authorizeAdmin, userCtrl.getAllUser);
 router.get('/profile', authenticateToken, userCtrl.getUserProfile);
 router.get('/zones', authenticateToken, userCtrl.listTimezones);
 
 
 router.put('/profile', authenticateToken, upload.single('avatar'), userCtrl.updateUserProfile);
 router.put('/update-region', authenticateToken, userCtrl.updateRegion);
-router.put('/role/:id', authenticateToken, userCtrl.changeUserRole);
+router.put('/role/:id', authenticateToken, authorizeAdmin, userCtrl.changeUserRole);
 
 router.delete('/delete', authenticateToken, userCtrl.deleteMyAccount);
 router.delete('/delete/:id', authenticateToken, authorizeAdmin, userCtrl.deleteUserAccount);
