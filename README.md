@@ -1,6 +1,6 @@
-# TechStarHQ
+# TechStarHR
 
-TechStarHQ is an HR management system designed to simplify employee tracking and payroll management.  
+TechStarHR is an HR management system designed to simplify employee tracking and payroll management.  
 This repository contains my implementation of the three assigned features.  
 
  Assigned Tasks
