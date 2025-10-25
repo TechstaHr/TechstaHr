@@ -49,6 +49,10 @@ app.use('/api/v1/billing', billingRoutes);
 app.use('/api/v1/screenshot', screenshotRoutes);
 app.use('/api/v1/time', timeRoutes);
 
+app.get('/', (req, res) => {
+  res.send('Techstahr backend is live 🚀');
+});
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
