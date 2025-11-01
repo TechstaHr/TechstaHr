@@ -20,12 +20,10 @@ const createProject = async (req, res) => {
       !Array.isArray(teamMembers) ||
       teamMembers.length === 0
     ) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Name, description, and at least one team member ID are required",
-        });
+      return res.status(400).json({
+        message:
+          "Name, description, and at least one team member ID are required",
+      });
     }
 
     const members = await User.find({
@@ -34,11 +32,9 @@ const createProject = async (req, res) => {
     });
 
     if (members.length !== teamMembers.length) {
-      return res
-        .status(400)
-        .json({
-          message: "One or more assigned users are not valid team members",
-        });
+      return res.status(400).json({
+        message: "One or more assigned users are not valid team members",
+      });
     }
 
     const newProject = new Project({
@@ -55,55 +51,65 @@ const createProject = async (req, res) => {
 
     await newProject.save();
 
-    for (const member of members) {
-      const settings = await NotificationSettings.findOne({ user: member._id });
+    // Send notifications to members
+    await Promise.all(
+      members.map(async (member) => {
+        try {
+          const settings = await NotificationSettings.findOne({ user: member._id });
 
-      if (!settings || settings.project_invitation_notification !== false) {
-        await Notifications.create({
-          recipient: member._id,
-          type: "project_invitation",
-          message: `You've been added to the project "${newProject.name}".`,
-          link: `/projects/${newProject._id}`,
-          actions: [
-            {
-              label: 'Accept',
-              url: `https://techstahr.onrender.com/api/v1/project/accept-invite/${newProject._id}`,
-            },
-            {
-              label: 'Reject',
-              url: `https://techstahr.onrender.com/api/v1/project/reject-invite/${newProject._id}`,
-            },
-          ],
-        });
-      }
+          if (!settings || settings.project_invitation_notification !== false) {
+            await Notifications.create({
+              recipient: member._id,
+              type: "project_invitation",
+              message: `You've been added to the project "${newProject.name}".`,
+              link: `/projects/${newProject._id}`,
+              actions: [
+                {
+                  label: 'Accept',
+                  url: `https://techstahr.onrender.com/api/v1/project/accept-invite/${newProject._id}`,
+                },
+                {
+                  label: 'Reject',
+                  url: `https://techstahr.onrender.com/api/v1/project/reject-invite/${newProject._id}`,
+                },
+              ],
+            });
+          }
 
-      if (!settings || settings.email_notification !== false) {
-        const html = ReactDOMServer.renderToStaticMarkup(
-          ProjectAssignedEmail({
-            full_name: member.full_name,
-            projectName: name,
-          })
-        );
+          if (!settings || settings.email_notification !== false) {
+            const html = ReactDOMServer.renderToStaticMarkup(
+              ProjectAssignedEmail({
+                full_name: member.full_name,
+                projectName: name,
+              })
+            );
 
-        await sendEmail({
-          to: member.email,
-          subject: `You've been added to project "${name}"`,
-          html,
-        });
-      }
-    }
+            await sendEmail({
+              to: member.email,
+              subject: `You've been added to project "${name}"`,
+              html,
+            });
+          }
+        } catch (err) {
+          console.error(`Error sending notification to ${member._id}:`, err);
+        }
+      })
+    );
 
     const populatedProject = await Project.findById(newProject._id)
-      .populate("teamMembers", "full_name email role")
+      .populate("teamMembers.user", "full_name email role")
       .populate("tasks");
 
-    res.status(201).json({
-      message: "Project created and assigned successfully",
+    return res.status(201).json({
+      message: "Project created successfully",
       project: populatedProject,
     });
   } catch (error) {
     console.error("Error creating project:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({
+      message: "Internal server error while creating project",
+      error: error.message,
+    });
   }
 };
 
