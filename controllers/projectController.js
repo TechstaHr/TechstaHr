@@ -51,7 +51,6 @@ const createProject = async (req, res) => {
 
     await newProject.save();
 
-    // Send notifications to members
     await Promise.all(
       members.map(async (member) => {
         try {
@@ -1283,6 +1282,122 @@ const getProjectComments = async (req, res) => {
   }
 };
 
+const editProject = async (req, res) => {
+  const { id } = req.params;
+  const updates = req.body;
+
+  try {
+    const project = await Project.findOne({ _id: id, team: req.user.team });
+    if (!project) return res.status(404).json({ message: "Project not found" });
+
+    const allowedUpdates = [
+      "name",
+      "description",
+      "deadline",
+      "priority",
+      "budget",
+      "milestones",
+      "tags"
+    ];
+
+    Object.keys(updates).forEach((key) => {
+      if (allowedUpdates.includes(key)) project[key] = updates[key];
+    });
+
+    await project.save();
+
+    const updatedProject = await Project.findById(id)
+      .populate("teamMembers.user", "full_name email role")
+      .populate("tasks");
+
+    res.status(200).json({
+      message: "Project updated successfully",
+      project: updatedProject,
+    });
+  } catch (error) {
+    console.error("Error updating project:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const updateProjectPreferences = async (req, res) => {
+  const { id } = req.params;
+  const prefs = req.body;
+
+  try {
+    const project = await Project.findOne({ _id: id, team: req.user.team });
+    if (!project) return res.status(404).json({ message: "Project not found" });
+
+    project.preferences = {
+      ...(project.preferences || {}),
+      ...(prefs || {})
+    };
+
+    await project.save();
+
+    res.status(200).json({
+      message: "Project preferences updated",
+      preferences: project.preferences,
+    });
+  } catch (error) {
+    console.error("Error updating project preferences:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const manageWorkload = async (req, res) => {
+  const { projectId } = req.params;
+  const { assignments, redistributeTasks } = req.body;
+
+  try {
+    const project = await Project.findOne({ _id: projectId, team: req.user.team }).populate("teamMembers.user");
+    if (!project) return res.status(404).json({ message: "Project not found" });
+
+    // Apply explicit assignments
+    if (Array.isArray(assignments) && assignments.length > 0) {
+      await Promise.all(assignments.map(async (a) => {
+        if (!a.taskId) return;
+        const update = {};
+        if (a.userId) update.assignedTo = a.userId;
+        if (a.estimatedHours !== undefined) update.estimatedHours = a.estimatedHours;
+        await MyTask.findOneAndUpdate({ _id: a.taskId, project: projectId }, { $set: update });
+      }));
+    }
+
+    if (redistributeTasks) {
+      const members = project.teamMembers
+        .filter(m => m.status === 'accepted' && m.user)
+        .map(m => m.user._id.toString());
+
+      if (members.length > 0) {
+        const unassignedTasks = await MyTask.find({
+          project: projectId,
+          $or: [{ assignedTo: { $exists: false } }, { assignedTo: null }]
+        });
+
+        await Promise.all(unassignedTasks.map((task, idx) => {
+          const memberId = members[idx % members.length];
+          return MyTask.findByIdAndUpdate(task._id, { $set: { assignedTo: memberId } });
+        }));
+      }
+    }
+
+    const updatedProject = await Project.findById(projectId)
+      .populate("teamMembers.user", "full_name email role")
+      .populate({
+        path: "tasks",
+        populate: { path: "owner assignedTo", select: "full_name email" }
+      });
+
+    res.status(200).json({
+      message: "Workload updated successfully",
+      project: updatedProject
+    });
+  } catch (error) {
+    console.error("Error managing workload:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
 
 module.exports = {
   createProject,
@@ -1315,4 +1430,8 @@ module.exports = {
   addProjectComment,
   replyToProjectComment,
   getProjectComments,
+  // newly added
+  editProject,
+  updateProjectPreferences,
+  manageWorkload,
 };

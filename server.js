@@ -1,6 +1,19 @@
-const express = require('express');
-const cors = require('cors');
-const morgan = require('morgan');
+// small helper to show a clear message if a dependency is missing
+const safeRequire = (moduleName) => {
+  try {
+    return require(moduleName);
+  } catch (err) {
+    if (err && err.code === 'MODULE_NOT_FOUND') {
+      console.error(`\nERROR: Missing module "${moduleName}".\nRun "npm install" in the project root to install dependencies and try again.\n`);
+      process.exit(1);
+    }
+    throw err;
+  }
+};
+
+const express = safeRequire('express');
+const cors = safeRequire('cors');
+const morgan = safeRequire('morgan');
 const ConnectDB = require('./config/db');
 
 const authRoutes = require('./routes/authRoutes');

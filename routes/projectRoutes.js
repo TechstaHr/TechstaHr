@@ -46,5 +46,8 @@ router.post('/:id/issues', authenticateToken, projectCtrl.addProjectIssue);
 router.put('/:projectId/issues/:issueId', authenticateToken, projectCtrl.updateProjectIssue);
 router.delete('/:id', authenticateToken, projectCtrl.deleteProjectById);
 router.get('/:id', authenticateToken, projectCtrl.getProjectById);
+router.put('/:id/edit', authenticateToken, authorizeAdmin, projectCtrl.editProject);
+router.put('/:id/preferences', authenticateToken, authorizeAdmin, projectCtrl.updateProjectPreferences);
+router.put('/:projectId/workload', authenticateToken, authorizeAdmin, projectCtrl.manageWorkload);
 
 module.exports = router;

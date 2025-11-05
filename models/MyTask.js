@@ -12,7 +12,7 @@ const MyTaskSchema = new mongoose.Schema({
     task_link: String,
     status: {
         type: String,
-        enum: ['to_do', 'in_progress', 'done'],
+        enum: ['to_do', 'in_progress', 'blocked', 'done', 'cancelled'],
         default: 'to_do'
     },
     owner: {
@@ -25,13 +25,14 @@ const MyTaskSchema = new mongoose.Schema({
         ref: "Project",
         required: true
     },
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    estimatedHours: { type: Number, default: 0 },
 
     enableScreenshot: { type: Boolean, default: false },
-    screenshotIntervalMinutes: { type: Number, default: 30, min: 1 },
-    nextScreenshotAt: Date,
-    lastScreenshotUrl: String,
-    screenshotHistory: [String]
+    screenshotIntervalMinutes: { type: Number, default: 0 },
+    lastScreenshotUrl: { type: String, default: null },
+    screenshotHistory: [{ type: String }]
 
 }, { timestamps: true });
 
-module.exports = mongoose.model("MyTask", MyTaskSchema);
+module.exports = mongoose.models.MyTask || mongoose.model("MyTask", MyTaskSchema);

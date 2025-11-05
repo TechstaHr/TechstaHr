@@ -1,9 +1,19 @@
 const jwt = require("jsonwebtoken");
 const TokenBlacklist = require("../models/TokenBlacklist");
 
-// ✅ Secure async middleware wrapper
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
+
+const getTokenFromHeader = (authHeader) => {
+  if (!authHeader) return null;
+  const parts = authHeader.split(" ");
+  if (parts.length === 2) return parts[1];
+  return null;
+};
+
+const verifyToken = (token) => {
+  return jwt.verify(token, process.env.JWT_SECRET);
+};
 
 const authenticateToken = asyncHandler(async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -11,7 +21,11 @@ const authenticateToken = asyncHandler(async (req, res, next) => {
     return res.status(401).json({ error: "No token provided" });
   }
 
-  const token = authHeader.split(" ")[1];
+  const token = getTokenFromHeader(authHeader);
+  if (!token) {
+    return res.status(401).json({ error: "No token provided" });
+  }
+
   const blacklisted = await TokenBlacklist.findOne({ token });
   if (blacklisted) {
     return res.status(401).json({
@@ -21,7 +35,7 @@ const authenticateToken = asyncHandler(async (req, res, next) => {
 
   let decoded;
   try {
-    decoded = jwt.verify(token, process.env.JWT_SECRET);
+    decoded = verifyToken(token);
   } catch (err) {
     if (err.name === "TokenExpiredError") {
       return res.status(401).json({ message: "Token expired" });
@@ -52,7 +66,7 @@ const authorizeAgent = (req, res, next) => {
 };
 
 const checkTokenBlacklisted = asyncHandler(async (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
+  const token = getTokenFromHeader(req.headers.authorization);
   if (!token) {
     return res.status(401).json({ message: "No token provided" });
   }
@@ -66,7 +80,7 @@ const checkTokenBlacklisted = asyncHandler(async (req, res, next) => {
 
   let decoded;
   try {
-    decoded = jwt.verify(token, process.env.JWT_SECRET);
+    decoded = verifyToken(token);
   } catch (err) {
     if (err.name === "TokenExpiredError") {
       return res.status(401).json({ message: "Token expired" });
