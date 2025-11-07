@@ -40,7 +40,26 @@ const ProjectSchema = new mongoose.Schema({
   progress: { type: Number, default: 0 },
   deadline: Date,
   startTime: Date,
-  endTime: Date
+  endTime: Date,
+  preferences: {
+    notification: {
+      emailNotifications: { type: Boolean, default: true },
+      projectInvitationNotification: { type: Boolean, default: true },
+      commentNotification: { type: Boolean, default: true },
+    },
+    taskSettings: {
+      requireEstimate: { type: Boolean, default: false },
+      defaultPriority: { type: String, enum: ['low','medium','high'], default: 'medium' }
+    },
+    timeTracking: {
+      enableTimeTracking: { type: Boolean, default: true },
+      autoClockOnAccept: { type: Boolean, default: true }
+    },
+    workload: {
+      autoRedistribute: { type: Boolean, default: false },
+      redistributionStrategy: { type: String, enum: ['round_robin','least_loaded'], default: 'round_robin' }
+    }
+  }
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
