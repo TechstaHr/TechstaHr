@@ -59,7 +59,16 @@ const ProjectSchema = new mongoose.Schema({
       autoRedistribute: { type: Boolean, default: false },
       redistributionStrategy: { type: String, enum: ['round_robin','least_loaded'], default: 'round_robin' }
     }
-  }
+  },
+  screenshotSettings: {
+    enabled: { type: Boolean, default: false },
+    intervalMinutes: { type: Number, default: 30 },
+  },
+  screenshotHistory: [{
+    url: String,
+    takenAt: Date,
+    takenBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  }]
 }, {
   timestamps: true,
   toJSON: { virtuals: true },

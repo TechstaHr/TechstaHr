@@ -49,6 +49,16 @@ const createProject = async (req, res) => {
       ...(deadline && { deadline }),
     });
 
+    if (!newProject.teamMembers.some((m) => m.user.toString() === req.user.id)) {
+     
+      newProject.teamMembers.unshift({ user: req.user.id, status: "accepted" });
+    } else {
+      
+      newProject.teamMembers = newProject.teamMembers.map((m) =>
+        m.user.toString() === req.user.id ? { ...m, status: "accepted" } : m
+      );
+    }
+
     await newProject.save();
 
     await Promise.all(

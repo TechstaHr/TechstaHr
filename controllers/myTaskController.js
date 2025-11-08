@@ -5,56 +5,87 @@ const TaskTimeLog = require('../models/TaskTimeLog');
 const User = require('../models/User');
 
 const createMyTask = async (req, res) => {
+  const {
+    title,
+    description,
+    deadline,
+    priority_tag,
+    status,
+    project: projectId,
+    assignedTo: assignedToId,
+    task_link,
+    estimatedHours
+  } = req.body;
+
   try {
-    const {
-      title,
-      description,
-      deadline,
-      priority_tag,
-      task_link,
-      status,
-      project
-    } = req.body;
+    if (!projectId) {
+      return res.status(400).json({ message: "Project ID is required" });
+    }
 
+    const project = await Project.findById(projectId).populate("teamMembers.user", "_id");
     if (!project) {
-      return res.status(400).json({ message: "Project ID is required for task creation" });
+      return res.status(404).json({ message: "Project not found" });
     }
 
-    const validProject = await Project.findOne({
-      _id: project,
-      "teamMembers.user": req.user.id
-    });
+    const requesterId = req.user.id;
 
-    if (!validProject) {
-      return res.status(403).json({ message: "You are not part of the project or project doesn't exist" });
+    // Check if requester is allowed to create a task:
+    // allow if requester is:
+    //  - an admin,
+    //  - the project creator,
+    //  - OR is listed among the project's teamMembers (status doesn't matter).
+    const isRequesterMember = project.teamMembers.some(
+      (m) => m.user && m.user._id.toString() === requesterId
+    );
+    const isCreator = project.createdBy && project.createdBy.toString() === requesterId;
+    const isAdmin = req.user.role === "admin";
+
+    if (!isRequesterMember && !isCreator && !isAdmin) {
+      return res
+        .status(403)
+        .json({ message: "You are not part of the project or project doesn't exist" });
     }
 
-    const newTask = new MyTask({
+    // If an assignee is provided, ensure the assignee is part of the project (invited is fine)
+    if (assignedToId) {
+      const assignedIsCreator = project.createdBy && project.createdBy.toString() === assignedToId;
+      const assignedIsMember = project.teamMembers.some(
+        (m) => m.user && m.user._id.toString() === assignedToId
+      );
+
+      if (!assignedIsMember && !assignedIsCreator) {
+        return res.status(400).json({
+          message: "Assignee must be part of the project (they can be invited/pending)",
+        });
+      }
+    }
+
+    // Create the task (MyTask model assumed)
+    const taskData = {
       title,
       description,
       deadline,
       priority_tag,
+      status: status || "to_do",
+      project: projectId,
+      owner: requesterId,
       task_link,
-      status,
-      owner: req.user.id,
-      project
-    });
+      estimatedHours: estimatedHours || 0,
+    };
 
-    await newTask.save();
+    if (assignedToId) {
+      taskData.assignedTo = assignedToId;
+    }
 
-    const adminUsers = await User.find({ team: req.user.team, role: "admin" });
-    const notifications = adminUsers.map(admin => ({
-      recipient: admin._id,
-      type: "task_created",
-      message: `${req.user.full_name} created a new task "${title}" in project "${validProject.name}".`,
-      link: `/projects/${validProject._id}/tasks`
-    }));
-    await Notifications.insertMany(notifications);
+    const newTask = await MyTask.create(taskData);
 
-    res.status(201).json(newTask);
+    // If you want to link the task into project.tasks virtuals are used; no manual push needed.
+    // Optionally, notify assignee if assigned and notifications enabled (existing logic may handle it).
+
+    return res.status(201).json({ message: "Task created", task: newTask });
   } catch (error) {
     console.error("Error creating task:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
