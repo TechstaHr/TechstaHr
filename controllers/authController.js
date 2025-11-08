@@ -161,12 +161,14 @@ const inviteUser = async (req, res) => {
         const inviteToken = crypto.randomBytes(32).toString("hex");
         const inviteExpiresAt = Date.now() + 1000 * 60 * 60 * 24 * 7;
 
+        const hashedPassword = await hashPassword("0000000");
+
         const newUser = await User.create({
             full_name,
             email,
             role,
             role_title,
-            password: null,
+            password: hashedPassword,
             invitedBy: req.user.id,
             inviteToken,
             inviteExpiresAt,
