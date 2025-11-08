@@ -6,7 +6,7 @@ const parseDateSafe = (input) => {
   if (!input) return new Date();
   const d = new Date(input);
   if (!isNaN(d.getTime())) return d;
-  // fallback: try splitting YYYY-MM-DD
+  
   const parts = input.split('-').map(Number);
   if (parts.length === 3) {
     const [y, m, day] = parts;
@@ -17,10 +17,9 @@ const parseDateSafe = (input) => {
 
 const weekRangeForDate = (date) => {
   const d = new Date(date);
-  // normalize to local midnight
+  
   d.setHours(0, 0, 0, 0);
-  const day = d.getDay(); // 0 (Sun) .. 6 (Sat)
-  // compute difference to Monday (1)
+  const day = d.getDay(); 
   const diffToMonday = (day === 0) ? -6 : (1 - day);
   const monday = new Date(d);
   monday.setDate(d.getDate() + diffToMonday);
