@@ -114,17 +114,17 @@ const notifyUploadCompletion = async (req, res) => {
     await project.save();
 
     // Create notification
-    await Notifications.create({
-      type: 'screenshot_uploaded',
-      message: `New screenshot uploaded for project "${project.name}"`,
-      recipient: project.createdBy,
-      link: `/projects/${projectId}/screenshots`,
-      metadata: {
-        projectId,
-        screenshotUrl: imageUrl,
-        uploadedBy: req.user.id
-      }
-    });
+    // await Notifications.create({
+    //   type: 'screenshot_uploaded',
+    //   message: `New screenshot uploaded for project "${project.name}"`,
+    //   recipient: project.createdBy,
+    //   link: `/projects/${projectId}/screenshots`,
+    //   metadata: {
+    //     projectId,
+    //     screenshotUrl: imageUrl,
+    //     uploadedBy: req.user.id
+    //   }
+    // });
 
     res.status(200).json({
       message: 'Screenshot upload recorded',
