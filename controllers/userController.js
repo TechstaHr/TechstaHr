@@ -345,4 +345,5 @@ module.exports = {
   adminClockOutUser,
   listTimezones,
   updateRegion,
+  getUserDetails 
 };
