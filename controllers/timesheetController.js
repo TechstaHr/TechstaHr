@@ -30,82 +30,18 @@ const weekRangeForDate = (date) => {
   return { start: monday, end: sunday };
 };
 
-const getAllTimesheets = async (req, res) => {
+exports.getAllTimesheets = async (req, res) => {
   try {
-    
-    const queryDate = parseDateSafe(req.query.date);
-    const { start, end } = weekRangeForDate(queryDate);
+    const timesheets = await TimeEntry.find()
+      .populate('user', 'name email')
+      .populate('project', 'name')
+      .sort({ date: -1 });
 
-    
-    const teamId = req.user.team;
+    res.json(timesheets);
 
-    const entries = await TimeEntry.find({
-      team: teamId,
-      date: { $gte: start, $lte: end },
-    })
-      .populate('user', 'full_name email')
-      .populate('project', 'name');
-
-    
-    const byUser = {};
-    for (const e of entries) {
-      const uid = e.user?._id?.toString() || 'unknown';
-      if (!byUser[uid]) {
-        byUser[uid] = {
-          user: e.user || null,
-          totalMinutes: 0,
-          days: {},
-          entries: [],
-        };
-      }
-
-      
-      let minutes = 0;
-      if (e.totalHours !== undefined && typeof e.totalHours === 'number') {
-        minutes = Math.round(e.totalHours * 60);
-      } else if (e.startTime && e.endTime) {
-        minutes = Math.round((new Date(e.endTime) - new Date(e.startTime)) / 60000);
-      } else if (e.startTime && !e.endTime) {
-        
-        minutes = Math.round((Date.now() - new Date(e.startTime)) / 60000);
-      }
-
-      byUser[uid].totalMinutes += minutes;
-      const dayKey = new Date(e.date).toISOString().split('T')[0];
-      byUser[uid].days[dayKey] = (byUser[uid].days[dayKey] || 0) + minutes;
-      byUser[uid].entries.push({
-        entryId: e._id,
-        project: e.project ? { id: e.project._id, name: e.project.name } : null,
-        date: e.date,
-        startTime: e.startTime,
-        endTime: e.endTime,
-        minutes,
-      });
-    }
-
-    
-    const formatHours = (mins) => {
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      return `${h}h ${m}m`;
-    };
-
-    const result = Object.values(byUser).map(u => ({
-      user: u.user,
-      totalMinutes: u.totalMinutes,
-      totalHoursFormatted: formatHours(u.totalMinutes),
-      days: u.days,
-      entries: u.entries,
-    }));
-
-    res.status(200).json({
-      weekStart: start.toISOString().split('T')[0],
-      weekEnd: end.toISOString().split('T')[0],
-      summary: result,
-    });
-  } catch (err) {
-    console.error('Error in getAllTimesheets:', err);
-    res.status(500).json({ message: 'Internal server error' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error fetching all timesheets', error: error.message });
   }
 };
 
@@ -258,6 +194,5 @@ module.exports = {
   clockOut,
   submitTimesheet,
   getMyTimesheets,
-  approveTimesheet,
-  getAllTimesheets
+  approveTimesheet
 };
