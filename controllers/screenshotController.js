@@ -104,14 +104,14 @@ const notifyUploadCompletion = async (req, res) => {
       return res.status(404).json({ message: 'Project not found' });
     }
 
-    const user = await User.findById(req.user.id);
+    //const user = await User.findById(req.user.id);
 
     // Add to project's screenshot history
     if (!project.screenshotHistory) project.screenshotHistory = [];
     project.screenshotHistory.push({
       url: imageUrl,
       takenAt: new Date(),
-      takenBy: user.email
+      takenBy: req.user.id
     });
 
     await project.save();
