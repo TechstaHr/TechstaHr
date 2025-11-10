@@ -30,7 +30,7 @@ const weekRangeForDate = (date) => {
   return { start: monday, end: sunday };
 };
 
-exports.getAllTimesheets = async (req, res) => {
+const getAllTimesheets = async (req, res) => {
   try {
     const timesheets = await TimeEntry.find()
       .populate('user', 'name email')
@@ -194,5 +194,6 @@ module.exports = {
   clockOut,
   submitTimesheet,
   getMyTimesheets,
-  approveTimesheet
+  approveTimesheet,
+  getAllTimesheets
 };
