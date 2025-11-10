@@ -78,74 +78,67 @@ const getMyTimesheets = async (req, res) => {
 
 const clockIn = async (req, res) => {
   try {
-    const actorId = req.user.id;
-    const userId = req.body.userId || actorId;
-    const projectId = req.body.projectId;
-    if (!projectId) return res.status(400).json({ message: 'projectId is required' });
+    const { projectId } = req.body;
+    const userId = req.user.id;
 
     
-    const today = new Date();
-    const startOfDay = new Date(today.setHours(0,0,0,0));
-    const existing = await TimeEntry.findOne({
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const project = await Project.findById(projectId);
+    if (!project) return res.status(404).json({ message: 'Project not found' });
+
+    
+    const existing = await TimeEntry.findOne({ user: userId, project: projectId, endTime: null });
+    if (existing) return res.status(400).json({ message: 'Already clocked in for this project' });
+
+    const entry = new TimeEntry({
       user: userId,
       project: projectId,
-      date: startOfDay,
-      endTime: null,
-    });
-
-    if (existing) {
-      return res.status(400).json({ message: 'Already clocked in for today on this project' });
-    }
-
-    const entry = await TimeEntry.create({
-      user: userId,
-      project: projectId,
-      date: startOfDay,
+      date: new Date(),
       startTime: new Date(),
-      team: req.user.team
+      status: 'pending'
     });
 
-    res.status(201).json({ message: 'Clocked in', entry });
-  } catch (err) {
-    console.error('Error in clockIn:', err);
-    res.status(500).json({ message: 'Internal server error' });
+    await entry.save();
+    res.status(201).json({ message: "Clocked in successfully", entry });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error clocking in', error: error.message });
   }
 };
 
 
 const clockOut = async (req, res) => {
   try {
-    const actorId = req.user.id;
-    const entryId = req.body.entryId || req.body.entryId === 0 ? req.body.entryId : null;
-    let entry;
+    const { entryId } = req.body;
 
-    if (entryId) {
-      entry = await TimeEntry.findOne({ _id: entryId });
-    } else {
-      const today = new Date();
-      const startOfDay = new Date(today.setHours(0,0,0,0));
-      const q = { user: actorId, date: { $gte: startOfDay, $lte: new Date(startOfDay.getTime() + 24*60*60*1000) }, endTime: null };
-      if (req.body.projectId) q.project = req.body.projectId;
-      entry = await TimeEntry.findOne(q);
-    }
+    const entry = await TimeEntry.findById(entryId)
+      .populate('user', 'name email')
+      .populate('project', 'name');
 
-    if (!entry) return res.status(404).json({ message: 'Active time entry not found' });
+    if (!entry || entry.endTime) return res.status(400).json({ message: 'No active clock-in found' });
 
-    const endTime = new Date();
-    const diffMs = endTime - new Date(entry.startTime);
-    const totalHours = diffMs / (1000*60*60);
+    entry.endTime = new Date();
 
-    entry.endTime = endTime;
-    entry.totalHours = totalHours;
-    entry.regularHours = Math.min(8, totalHours);
-    entry.overtimeHours = Math.max(0, totalHours - 8);
+    
+    const ms = entry.endTime - entry.startTime;
+    const hours = ms / (1000 * 60 * 60);
+
+    entry.totalHours = hours;
+    entry.regularHours = Math.min(hours, 8);
+    entry.overtimeHours = hours > 8 ? hours - 8 : 0;
 
     await entry.save();
+    res.status(200).json({
+      message: "Clocked out successfully",
+      entry: entry
+    });
 
-    res.status(200).json({ message: 'Clocked out', entry });
-  } catch (err) {
-    console.error('Error in clockOut:', err);
-    res.status(500).json({ message: 'Internal server error' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error clocking out', error: error.message });
   }
 };
 
