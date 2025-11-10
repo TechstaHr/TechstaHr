@@ -6,6 +6,7 @@ const { authenticateToken, authorizeAdmin } = require('../middlewares/authMiddle
 const upload = require('../middlewares/upload');
 
 router.get('/users', authenticateToken, authorizeAdmin, userCtrl.getAllUser);
+router.get('/users/:userId', authenticateToken, authorizeAdmin, userCtrl.getUserDetails);
 router.get('/profile', authenticateToken, userCtrl.getUserProfile);
 router.get('/zones', authenticateToken, userCtrl.listTimezones);
 
