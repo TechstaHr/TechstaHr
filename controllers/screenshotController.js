@@ -1,6 +1,7 @@
 const Project = require('../models/Project');
 const Notifications = require('../models/Notifications');
 const cloudinary = require('../utils/cloudinary');
+const User = require('../models/User');
 
 const setScreenshotSettings = async (req, res) => {
   try {
@@ -103,12 +104,14 @@ const notifyUploadCompletion = async (req, res) => {
       return res.status(404).json({ message: 'Project not found' });
     }
 
+    const user = await User.findById(req.user.id);
+
     // Add to project's screenshot history
     if (!project.screenshotHistory) project.screenshotHistory = [];
     project.screenshotHistory.push({
       url: imageUrl,
       takenAt: new Date(),
-      takenBy: req.user.id
+      takenBy: user.email
     });
 
     await project.save();
