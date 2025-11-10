@@ -28,6 +28,22 @@ const setScreenshotSettings = async (req, res) => {
   }
 };
 
+const getScreenshotSettings = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' });
+    }
+
+    res.status(200).json({ message: 'Screenshot settings updated', settings: project.screenshotSettings });
+  } catch (error) {
+    console.error('Error updating screenshot settings:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 const stopScreenshot = async (req, res) => {
     try {
         const { projectId } = req.params;
@@ -144,5 +160,6 @@ module.exports = {
   stopScreenshot,
   getProjectScreenshots,
   generateUploadSignature,
-  notifyUploadCompletion
+  notifyUploadCompletion,
+  getScreenshotSettings
 };
