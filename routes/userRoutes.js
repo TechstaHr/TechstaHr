@@ -12,6 +12,7 @@ router.get('/zones', authenticateToken, userCtrl.listTimezones);
 
 
 router.put('/profile', authenticateToken, upload.single('avatar'), userCtrl.updateUserProfile);
+router.post('/upload-profile-picture', authenticateToken, upload.single('avatar'), userCtrl.uploadProfilePicture);
 router.put('/update-region', authenticateToken, userCtrl.updateRegion);
 router.put('/role/:id', authenticateToken, authorizeAdmin, userCtrl.changeUserRole);
 

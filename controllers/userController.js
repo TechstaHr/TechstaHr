@@ -10,7 +10,7 @@ const getAllUser = async (req, res) => {
         const users = await User.find({ team: teamId })
             .select('-password -otp -otpExpiresAt')
             .populate('team', 'name')
-            .sort({ role: 1, createdAt: -1 }); // Sort by role, then by creation date
+            .sort({ role: 1, createdAt: -1 }); 
 
         res.json({ 
             users,
@@ -333,6 +333,49 @@ const updateRegion = async (req, res) => {
   }
 };
 
+const uploadProfilePicture = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded. Provide form-data key "avatar".' });
+    }
+
+    
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png'];
+    if (!allowed.includes(req.file.mimetype)) {
+      return res.status(400).json({ message: 'Invalid file type. Only JPG/JPEG/PNG allowed.' });
+    }
+
+    
+    const MAX_BYTES = 5 * 1024 * 1024;
+    if (req.file.size && req.file.size > MAX_BYTES) {
+      return res.status(400).json({ message: 'File too large. Max size is 5MB.' });
+    }
+
+    
+    const avatarUrl = req.file.path || req.file.secure_url || req.file.url || (req.file.location && req.file.location) || null;
+
+    if (!avatarUrl) {
+      console.error('Upload succeeded but no file URL found on req.file:', req.file);
+      return res.status(500).json({ message: 'Upload failed to produce a file URL' });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      { avatar: avatarUrl },
+      { new: true, select: '-password -otp -otpExpiresAt' }
+    ).populate('team', 'name');
+
+    return res.status(200).json({
+      message: 'Profile picture uploaded successfully',
+      avatar: avatarUrl,
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error('Error uploading profile picture:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 module.exports = {
   getAllUser,
   getUserProfile,
@@ -345,5 +388,6 @@ module.exports = {
   adminClockOutUser,
   listTimezones,
   updateRegion,
+  uploadProfilePicture,
   getUserDetails 
 };
