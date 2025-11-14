@@ -24,8 +24,6 @@ async function refreshToken() {
     accessToken = response.data.access_token;
     expiresIn = response.data.expires_in;
     lastTokenRefreshTime = Date.now();
-
-    console.log('New Token:', accessToken);
     console.log('Expires in:', expiresIn, 'seconds');
   } catch (error) {
     console.error('Error refreshing token:', error.response ? error.response.data : error.message);

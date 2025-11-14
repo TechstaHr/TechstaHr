@@ -5,31 +5,40 @@ const Bank = require('../models/Bank');
 
 const defaultFile = path.join(__dirname, '..', 'data', 'banks.json');
 const filePath = process.argv[2] ? path.resolve(process.argv[2]) : defaultFile;
+const DEFAULT_COUNTRY = 'Nigeria';
+const DEFAULT_CURRENCY = 'NGN';
 
 async function parseBanksFromFile(fp) {
   const raw = fs.readFileSync(fp, 'utf8');
   const json = JSON.parse(raw);
 
-  if (json && Array.isArray(json.data)) {
-    return json.data.map((b) => ({
-      bankName: b.name,
-      code: String(b.code).trim(),
-      country: b.country || 'Nigeria',
-      currency: b.currency || 'NGN',
-    }));
+  const banksArray = Array.isArray(json)
+    ? json
+    : json && Array.isArray(json.data)
+      ? json.data
+      : null;
+
+  if (!banksArray) {
+    throw new Error('Unknown JSON format for banks (expect array or { data: [...] })');
   }
 
+  return banksArray
+    .map((bank) => {
+      const code = bank.code && String(bank.code).trim();
+      const bankName = (bank.bankName || bank.name || '').trim();
 
-  if (Array.isArray(json)) {
-    return json.map((b) => ({
-      bankName: b.bankName || b.name,
-      code: String(b.code).trim(),
-      country: b.country || 'Nigeria',
-      currency: b.currency || 'NGN',
-    }));
-  }
+      if (!code || !bankName) {
+        return null;
+      }
 
-  throw new Error('Unknown JSON format for banks (expect array or { data: [...] })');
+      return {
+        bankName,
+        code,
+        country: bank.country || DEFAULT_COUNTRY,
+        currency: bank.currency || DEFAULT_CURRENCY,
+      };
+    })
+    .filter(Boolean);
 }
 
 async function run() {
