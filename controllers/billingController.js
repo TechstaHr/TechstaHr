@@ -83,7 +83,7 @@ const createPayroll = async (req, res) => {
 const updatePayroll = async (req, res) => {
   try {
     const existingPayroll = await Payroll.findById(req.params.id);
-    if (existingPayroll.paymentStatus === "scheduled" || existingPayroll.paymentStatus === "failed") {
+    if (existingPayroll.paymentStatus === "completed" || existingPayroll.paymentStatus === "failed") {
       res.status(403).json({ message: "Can only update scheduled payment" });
     }
     delete req.body.traceId;
