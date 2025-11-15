@@ -22,6 +22,7 @@ router.get('/banks', async (req, res) => {
 });
 router.post('/payroll', authenticateToken, authorizeAdmin, billingCtrl.createPayroll);
 router.get('/payroll/:id', authenticateToken, authorizeAdmin, billingCtrl.getPayroll);
+router.get('/payrolls', authenticateToken, authorizeAdmin, billingCtrl.getAllPayroll);
 router.post('/payroll/update/:id', authenticateToken, authorizeAdmin, billingCtrl.updatePayroll);
 router.post('/banks/add', authenticateToken, authorizeAdmin, async (req, res) => {
   try {
