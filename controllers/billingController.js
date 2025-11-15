@@ -175,5 +175,6 @@ module.exports = {
     getPayroll,
     getBank,
     deleteBank,
-    updateBank
+    updateBank,
+    getAllPayroll
 }
