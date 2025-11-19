@@ -3,7 +3,6 @@ require('dotenv').config();
 
 const sendEmail = async (options) => {
   try {
-    // Parse the 'from' option to extract address and name
     let fromAddress = process.env.ZEPTO_SENDER || "noreply@techstahr.com";
     let fromName = "Techstahr";
     
@@ -56,7 +55,6 @@ const sendEmail = async (options) => {
       track_opens: true
     };
 
-    // Add optional fields if provided
     if (options.cc) {
       payload.cc = Array.isArray(options.cc) 
         ? options.cc.map(email => ({ email_address: { address: email, name: email } }))
@@ -71,7 +69,6 @@ const sendEmail = async (options) => {
       }];
     }
 
-    // Make the API request to Zepto Mail
     const response = await axios({
       method: 'POST',
       url: process.env.ZEPTO_API_URL || 'https://api.zeptomail.com/v1.1/email',
