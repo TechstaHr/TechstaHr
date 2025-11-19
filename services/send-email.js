@@ -74,7 +74,7 @@ const sendEmail = async (options) => {
     // Make the API request to Zepto Mail
     const response = await axios({
       method: 'POST',
-      url: process.env.ZEPTO_API_URL || 'https://api.zeptomail.eu/v1.1/email',
+      url: process.env.ZEPTO_API_URL || 'https://api.zeptomail.com/v1.1/email',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
