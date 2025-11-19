@@ -322,12 +322,12 @@ const login = async (req, res) => {
     try {
         const user = await User.findOne({ email });
         if (!user) {
-            return res.status(400).json({ message: "User not found" });
+            return res.status(400).json({ message: "Invalid user or password" });
         }
 
         const isPasswordValid = await comparePassword(password, user.password);
         if (!isPasswordValid) {
-            return res.status(400).json({ message: "Invalid password" });
+            return res.status(400).json({ message: "Invalid user or password" });
         }
 
         user.isOnline = true;
