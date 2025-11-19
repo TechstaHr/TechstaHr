@@ -23,7 +23,7 @@ This repository contains my implementation of the three assigned features.
 ## Dev setup locally
 - create account on [cloudinary.com](https://cloudinary.com) to get the api key and secrets
 - create account on [https://cloud.mongodb.com](https://cloud.mongodb.com) to get database connection url
-- Create a .env file, copy the one in .env.example. Replace the value.
+- Create a .env file, copy the one in .env.example. Ask the team for the correct values for all the variables.
 - Run it `npm start`. It's avaibale at: `http://0.0.0.0:3001/api/v1/`
 - create an account `http://0.0.0.0:3001/api/v1/signup`.
 Sample payload:

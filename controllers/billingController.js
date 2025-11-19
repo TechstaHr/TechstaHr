@@ -83,7 +83,7 @@ const createPayroll = async (req, res) => {
 const updatePayroll = async (req, res) => {
   try {
     const existingPayroll = await Payroll.findById(req.params.id);
-    if (existingPayroll.paymentStatus === "scheduled" || existingPayroll.paymentStatus === "failed") {
+    if (existingPayroll.paymentStatus === "completed" || existingPayroll.paymentStatus === "failed") {
       res.status(403).json({ message: "Can only update scheduled payment" });
     }
     delete req.body.traceId;
@@ -108,6 +108,18 @@ const getPayroll = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+const getAllPayroll = async (req, res) => {
+  try {
+    const existingPayroll = await Payroll.find();
+    if (!existingPayroll) return res.status(404).json({ message: 'Payroll not found' });
+
+    res.status(200).json(existingPayroll);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 
 const createBilling = async (req, res) => {
     try {
@@ -163,5 +175,6 @@ module.exports = {
     getPayroll,
     getBank,
     deleteBank,
-    updateBank
+    updateBank,
+    getAllPayroll
 }
