@@ -4,6 +4,7 @@ const Project = require("../models/Project");
 const NotificationSettings = require("../models/NotificationSettings");
 const Notifications = require("../models/Notifications");
 const DeadlineReminderEmail = require("../emails/DeadlineReminderEmail.jsx");
+const sendEmail = require("../services/send-email");
 
 cron.schedule("0 9 * * *", async () => {
     const now = new Date();
