@@ -5,3 +5,4 @@ scripts
 /chrome/
 .env
 .DS_Store
+logs/

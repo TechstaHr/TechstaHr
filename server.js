@@ -38,14 +38,33 @@ app.use(cors({
   origin: ['http://localhost:3000', 'http://localhost:5173', 'https://techstahr-khaki.vercel.app', 'https://techstahr.com', 'https://dashboard.techstahr.com']
 }));
 
+// Log ALL requests before any parsing
 app.use((req, res, next) => {
   console.log(`[${req.method}] ${req.originalUrl}`);
+  
+  // Special logging for webhook endpoint
+  if (req.originalUrl.includes('flutterwave-webhook')) {
+    console.log('🔔 WEBHOOK REQUEST DETECTED!');
+    console.log('Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('Content-Type:', req.headers['content-type']);
+    console.log('Content-Length:', req.headers['content-length']);
+  }
+  
   next();
 });
 
 app.use(morgan('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Increase body size limit for webhooks (Flutterwave can send large payloads)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Log body after parsing for webhook
+app.use((req, res, next) => {
+  if (req.originalUrl.includes('flutterwave-webhook')) {
+    console.log('📦 Parsed Body:', JSON.stringify(req.body, null, 2));
+  }
+  next();
+});
 const PORT = process.env.PORT || 5000;
 
 ConnectDB();

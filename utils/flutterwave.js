@@ -4,7 +4,7 @@ const FLW_CLIENT_ID = process.env.FLW_CLIENT_ID
 const FLW_CLIENT_SECRET = process.env.FLW_CLIENT_SECRET
 const FLW_BASE_URL = process.env.FLW_BASE_URL;
 let accessToken = null;
-let expiresIn = 0; // token expiry time in seconds
+let expiresIn = 0;
 let lastTokenRefreshTime = 0;
 
 async function refreshToken() {
@@ -43,7 +43,7 @@ async function ensureTokenIsValid() {
   }
 }
 
-setInterval(ensureTokenIsValid, 5000); // check every 5 seconds
+setInterval(ensureTokenIsValid, 50000); // check every 5 seconds
 
 
 const directTransfer = async (data) => {
