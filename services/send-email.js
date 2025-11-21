@@ -17,7 +17,7 @@ const sendEmail = async (options) => {
     if (!process.env.RESEND_API_KEY) {
       throw new Error("RESEND_API_KEY is not configured");
     }
-    const from = process.env.RESEND_FROM || "Techstahr <noreply@techstahr.com>";
+    const from = "Techstahr <noreply@techstahr.com>";
 
     const to = normalizeRecipients(options.to);
     if (!to.length) {
