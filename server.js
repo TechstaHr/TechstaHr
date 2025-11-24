@@ -34,8 +34,11 @@ require('dotenv').config();
 
 const app = express();
 
+// app.use(cors({
+//   origin: ['http://localhost:3000', 'http://localhost:5173', 'https://techstahr-khaki.vercel.app', 'https://techstahr.com', 'https://dashboard.techstahr.com', 'https://usetechstarhr.vercel.app', 'app://']
+// }));
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173', 'https://techstahr-khaki.vercel.app', 'https://techstahr.com', 'https://dashboard.techstahr.com', 'https://usetechstarhr.vercel.app', 'app://-']
+  origin: '*' 
 }));
 
 app.use((req, res, next) => {
