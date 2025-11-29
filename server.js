@@ -48,9 +48,6 @@ app.use((req, res, next) => {
   // Special logging for webhook endpoint
   if (req.originalUrl.includes('flutterwave-webhook')) {
     console.log('🔔 WEBHOOK REQUEST DETECTED!');
-    console.log('Headers:', JSON.stringify(req.headers, null, 2));
-    console.log('Content-Type:', req.headers['content-type']);
-    console.log('Content-Length:', req.headers['content-length']);
   }
   
   next();
