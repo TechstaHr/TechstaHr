@@ -11,7 +11,7 @@ const safeRequire = (moduleName) => {
   }
 };
 
-const express = safeRequire('express');
+const express = safeRequire('express'); 
 const cors = safeRequire('cors');
 const morgan = safeRequire('morgan');
 const ConnectDB = require('./config/db');
@@ -34,8 +34,11 @@ require('dotenv').config();
 
 const app = express();
 
+// app.use(cors({
+//   origin: ['http://localhost:3000', 'http://localhost:5173', 'https://techstahr-khaki.vercel.app', 'https://techstahr.com', 'https://dashboard.techstahr.com', 'https://usetechstarhr.vercel.app', 'app://']
+// }));
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173', 'https://techstahr-khaki.vercel.app', 'https://techstahr.com', 'https://dashboard.techstahr.com']
+  origin: '*' 
 }));
 
 // Log ALL requests before any parsing

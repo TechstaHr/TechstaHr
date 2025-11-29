@@ -1,89 +1,61 @@
-const axios = require("axios");
-require('dotenv').config();
+const { Resend } = require("resend");
+require("dotenv").config();
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+const normalizeRecipients = (recipients) => {
+  if (!recipients) return [];
+  if (typeof recipients === "string") {
+    return recipients.split(",").map((email) => email.trim()).filter(Boolean);
+  }
+  if (Array.isArray(recipients)) return recipients.filter(Boolean);
+  return [];
+};
 
 const sendEmail = async (options) => {
   try {
-    let fromAddress = process.env.ZEPTO_SENDER || "noreply@techstahr.com";
-    let fromName = "Techstahr";
-    
-    if (options.from) {
-      const fromMatch = options.from.match(/^(?:"([^"]+)"\s*)?<?([^>]+)>?$/);
-      if (fromMatch) {
-        fromName = fromMatch[1] || fromName;
-        fromAddress = fromMatch[2] || fromAddress;
-      }
+    if (!process.env.RESEND_API_KEY) {
+      throw new Error("RESEND_API_KEY is not configured");
     }
+    const from = "Techstahr <noreply@techstahr.com>";
 
-    let toRecipients = [];
-    if (typeof options.to === 'string') {
-      const toEmails = options.to.split(',').map(email => email.trim());
-      toRecipients = toEmails.map(email => {
-        const emailMatch = email.match(/^(?:"([^"]+)"\s*)?<?([^>]+)>?$/);
-        if (emailMatch) {
-          return {
-            email_address: {
-              address: emailMatch[2] || email,
-              name: emailMatch[1] || emailMatch[2] || email
-            }
-          };
-        }
-        return {
-          email_address: {
-            address: email,
-            name: email
-          }
-        };
-      });
-    } else if (Array.isArray(options.to)) {
-      toRecipients = options.to.map(email => ({
-        email_address: {
-          address: email,
-          name: email
-        }
-      }));
+    const to = normalizeRecipients(options.to);
+    if (!to.length) {
+      throw new Error("No recipients provided for email");
     }
 
     const payload = {
-      from: {
-        address: fromAddress,
-        name: fromName
-      },
-      to: toRecipients,
+      from,
+      to,
       subject: options.subject,
-      htmlbody: options.html,
-      track_clicks: true,
-      track_opens: true
+      html: options.html,
     };
 
-    if (options.cc) {
-      payload.cc = Array.isArray(options.cc) 
-        ? options.cc.map(email => ({ email_address: { address: email, name: email } }))
-        : [{ email_address: { address: options.cc, name: options.cc } }];
+    const cc = normalizeRecipients(options.cc);
+    if (cc.length) payload.cc = cc;
+
+    const bcc = normalizeRecipients(options.bcc);
+    if (bcc.length) payload.bcc = bcc;
+
+    const replyTo = options.reply_to || options.replyTo;
+    if (replyTo) {
+      const parsedReply = normalizeRecipients(replyTo);
+      if (parsedReply.length) payload.reply_to = parsedReply;
     }
 
-    if (options.reply_to || options.replyTo) {
-      const replyTo = options.reply_to || options.replyTo;
-      payload.reply_to = [{
-        address: replyTo,
-        name: replyTo
-      }];
+    const { data, error } = await resend.emails.send(payload);
+    if (error) {
+      throw new Error(error.message || "Resend email failed");
     }
 
-    const response = await axios({
-      method: 'POST',
-      url: process.env.ZEPTO_API_URL || 'https://api.zeptomail.com/v1.1/email',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': process.env.ZEPTO_API_KEY
-      },
-      data: payload
-    });
-
-    return response.data;
+    return data;
   } catch (error) {
-    console.error('Zepto Mail API Error:', error.response?.data || error.message);
-    throw new Error(`Failed to send email: ${error.response?.data?.message || error.message}`);
+    console.error("Resend Error:", error?.response?.data || error.message || error);
+    throw new Error(
+      `Failed to send email: ${
+        error?.response?.data?.message || error.message || "Unknown error"
+      }`
+    );
   }
 };
 
