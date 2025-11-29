@@ -59,7 +59,6 @@ const verifyPayment = async (req, res) => {
                 data: response.data.data,
             }
         );
-
     } catch (error) {
         res.status(500).json({
             message: 'Payment verification failed',
@@ -221,6 +220,7 @@ const flutterwaveWebhook = async (req, res) => {
     res.status(500).json({ message: 'Error handling webhook event', error: err.message });
   }
 };
+
 
 module.exports = {
     initializePayment,

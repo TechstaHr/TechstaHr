@@ -8,7 +8,57 @@ const ReactDOMServer = require('react-dom/server');
 const crypto = require('crypto');
 const { hashPassword, comparePassword } = require("../utils/hash");
 const { generateAccessToken } = require("../utils/token");
+const { createCustomer } = require("../utils/flutterwave");
 require('dotenv').config();
+
+/**
+ * Helper function to create a Flutterwave customer
+ * @param {Object} userData - User data
+ * @returns {string|null} Flutterwave customer ID or null if failed
+ */
+const createFlutterwaveCustomer = async (userData) => {
+    try {
+        const nameParts = userData.full_name?.split(' ') || ['', ''];
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts[nameParts.length - 1] || '';
+        const middleName = nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '';
+
+        const flwData = {
+            email: userData.email,
+            name: {
+                first: firstName,
+                middle: middleName,
+                last: lastName
+            },
+            phone: {
+                country_code: userData.phone_country_code || "234",
+                number: userData.phone_number || ""
+            },
+            address: {
+                city: userData.city || "",
+                country: userData.country || "NG",
+                line1: userData.address_line1 || "",
+                line2: userData.address_line2 || "",
+                postal_code: userData.postal_code || "",
+                state: userData.state || ""
+            },
+            traceId: crypto.randomBytes(16).toString('hex')
+        };
+
+        const response = await createCustomer(flwData);
+        
+        if (response.status === 'success' && response.data?.id) {
+            console.log(`Flutterwave customer created: ${response.data.id}`);
+            return response.data.id;
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('Error creating Flutterwave customer:', error);
+        // Don't throw error - allow user creation to proceed even if Flutterwave fails
+        return null;
+    }
+};
 
 const createAdmin = async (req, res) => {
     const { email, password, full_name, role_title } = req.body;
@@ -26,6 +76,9 @@ const createAdmin = async (req, res) => {
 
         const hashedPassword = await hashPassword(password);
 
+        // Create Flutterwave customer
+        const flwCustomerId = await createFlutterwaveCustomer({ email, full_name });
+
         const newAdmin = new User({
             email,
             password: hashedPassword,
@@ -33,7 +86,8 @@ const createAdmin = async (req, res) => {
             role_title,
             role: 'admin',
             team: req.user.team,
-            invitedBy: req.user.id
+            invitedBy: req.user.id,
+            flw_customer_id: flwCustomerId
         });
 
         await newAdmin.save();
@@ -76,6 +130,9 @@ const createUserByAdmin = async (req, res) => {
 
         const hashedPassword = await hashPassword(password);
 
+        // Create Flutterwave customer
+        const flwCustomerId = await createFlutterwaveCustomer({ email, full_name });
+
         const newUser = new User({
             email,
             password: hashedPassword,
@@ -83,7 +140,8 @@ const createUserByAdmin = async (req, res) => {
             team: req.user.team,
             role_title,
             full_name,
-            invitedBy: req.user.id
+            invitedBy: req.user.id,
+            flw_customer_id: flwCustomerId
         });
 
         await newUser.save();
@@ -163,6 +221,9 @@ const inviteUser = async (req, res) => {
 
         const hashedPassword = await hashPassword("0000000");
 
+        // Create Flutterwave customer
+        const flwCustomerId = await createFlutterwaveCustomer({ email, full_name });
+
         const newUser = await User.create({
             full_name,
             email,
@@ -172,7 +233,8 @@ const inviteUser = async (req, res) => {
             invitedBy: req.user.id,
             inviteToken,
             inviteExpiresAt,
-            team: req.user.team
+            team: req.user.team,
+            flw_customer_id: flwCustomerId
         });
 
         const inviter = await User.findById(req.user.id);
@@ -283,12 +345,16 @@ const signup = async (req, res) => {
 
         const hashedPassword = await hashPassword(password);
 
+        // Create Flutterwave customer
+        const flwCustomerId = await createFlutterwaveCustomer({ email: normalizedEmail, full_name });
+
         const newUser = new User({
             email: normalizedEmail,
             full_name,
             role: "admin",
             password: hashedPassword,
-            team: team._id
+            team: team._id,
+            flw_customer_id: flwCustomerId
         });
 
         await newUser.save();

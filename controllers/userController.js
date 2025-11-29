@@ -2,6 +2,8 @@ const TimeEntry = require('../models/TimeEntry');
 const User = require('../models/User');
 const moment = require('moment-timezone');
 const getAllTimezones = require('../utils/timezones');
+const { searchCustomer, createCustomer } = require('../utils/flutterwave');
+const crypto = require('crypto');
 
 const getAllUser = async (req, res) => {
     try {
@@ -75,6 +77,80 @@ const updateUserProfile = async (req, res) => {
 
         if (req.file && req.file.path) {
             fieldsToUpdate.avatar = req.file.path;
+        }
+
+        // Get current user data before update
+        const currentUser = await User.findById(userId);
+        if (!currentUser) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        // Check if user exists in Flutterwave and create if not
+        if (!currentUser.flw_customer_id) {
+            try {
+                // Search for customer in Flutterwave
+                const searchResult = await searchCustomer({
+                    email: currentUser.email,
+                    page: 1,
+                    size: 10,
+                    traceId: crypto.randomBytes(16).toString('hex')
+                });
+
+                let flwCustomerId = null;
+
+                // Check if customer exists in search results
+                if (searchResult.status === 'success' && 
+                    searchResult.data && 
+                    Array.isArray(searchResult.data) && 
+                    searchResult.data.length > 0) {
+                    // Customer exists, get the ID
+                    flwCustomerId = searchResult.data[0].id;
+                    console.log(`Flutterwave customer found: ${flwCustomerId}`);
+                } else {
+                    // Customer doesn't exist, create new one
+                    const nameParts = currentUser.full_name?.split(' ') || ['', ''];
+                    const firstName = nameParts[0] || '';
+                    const lastName = nameParts[nameParts.length - 1] || '';
+                    const middleName = nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '';
+
+                    const flwData = {
+                        email: currentUser.email,
+                        name: {
+                            first: firstName,
+                            middle: middleName,
+                            last: lastName
+                        },
+                        phone: {
+                            country_code: currentUser.phone_country_code || "234",
+                            number: currentUser.phone_number || ""
+                        },
+                        address: {
+                            city: currentUser.city || "",
+                            country: currentUser.country || "NG",
+                            line1: currentUser.address_line1 || "",
+                            line2: currentUser.address_line2 || "",
+                            postal_code: currentUser.postal_code || "",
+                            state: currentUser.state || ""
+                        },
+                        traceId: crypto.randomBytes(16).toString('hex')
+                    };
+
+                    const createResult = await createCustomer(flwData);
+                    
+                    if (createResult.status === 'success' && createResult.data?.id) {
+                        flwCustomerId = createResult.data.id;
+                        console.log(`Flutterwave customer created: ${flwCustomerId}`);
+                    }
+                }
+
+                // Update flw_customer_id if we got one
+                if (flwCustomerId) {
+                    fieldsToUpdate.flw_customer_id = flwCustomerId;
+                }
+            } catch (flwError) {
+                console.error('Flutterwave customer check/creation error:', flwError);
+                // Don't fail the profile update if Flutterwave fails
+            }
         }
 
         const updatedUser = await User.findByIdAndUpdate(

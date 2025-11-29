@@ -39,6 +39,11 @@ const UserSchema = new mongoose.Schema({
     team: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Team"
+    },
+
+    flw_customer_id: {
+        type: String,
+        trim: true
     }
 }, {
     timestamps: true
