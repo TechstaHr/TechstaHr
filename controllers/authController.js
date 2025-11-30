@@ -3,6 +3,7 @@ const Team = require("../models/Team");
 const TokenBlacklist = require("../models/TokenBlacklist");
 const OtpEmail = require("../emails/OtpEmail.jsx");
 const InviteEmail = require("../emails/InviteEmail.jsx");
+const WelcomeOnboardEmail = require("../emails/WelcomeOnboardEmail.jsx");
 const sendEmail = require("../services/send-email");
 const ReactDOMServer = require('react-dom/server');
 const crypto = require('crypto');
@@ -37,6 +38,22 @@ const createAdmin = async (req, res) => {
         });
 
         await newAdmin.save();
+
+        // Send welcome email
+        try {
+            const html = ReactDOMServer.renderToStaticMarkup(
+                WelcomeOnboardEmail({ full_name: newAdmin.full_name })
+            );
+
+            await sendEmail({
+                to: newAdmin.email,
+                subject: "Welcome to Techstahr! 🎉",
+                html
+            });
+        } catch (emailError) {
+            console.error("Error sending welcome email:", emailError);
+            // Continue even if email fails
+        }
 
         return res.status(201).json({
             message: "Admin account created successfully",
@@ -87,6 +104,22 @@ const createUserByAdmin = async (req, res) => {
         });
 
         await newUser.save();
+
+        // Send welcome email
+        try {
+            const html = ReactDOMServer.renderToStaticMarkup(
+                WelcomeOnboardEmail({ full_name: newUser.full_name })
+            );
+
+            await sendEmail({
+                to: newUser.email,
+                subject: "Welcome to Techstahr! 🎉",
+                html
+            });
+        } catch (emailError) {
+            console.error("Error sending welcome email:", emailError);
+            // Continue even if email fails
+        }
 
         res.status(201).json({
             message: `${role} account created successfully`,
@@ -292,6 +325,22 @@ const signup = async (req, res) => {
         });
 
         await newUser.save();
+
+        // Send welcome email
+        try {
+            const html = ReactDOMServer.renderToStaticMarkup(
+                WelcomeOnboardEmail({ full_name: newUser.full_name })
+            );
+
+            await sendEmail({
+                to: newUser.email,
+                subject: "Welcome to Techstahr! 🎉",
+                html
+            });
+        } catch (emailError) {
+            console.error("Error sending welcome email:", emailError);
+            // Continue even if email fails
+        }
 
         const token = generateAccessToken(newUser);
 
