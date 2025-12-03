@@ -96,6 +96,8 @@ const updateUserProfile = async (req, res) => {
                     traceId: crypto.randomBytes(16).toString('hex')
                 });
 
+                console.log('Flutterwave customer search result:', searchResult);
+
                 let flwCustomerId = null;
 
                 // Check if customer exists in search results

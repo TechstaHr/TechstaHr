@@ -23,7 +23,6 @@ const createFlutterwaveCustomer = async (userData) => {
         const firstName = nameParts[0] || '';
         const lastName = nameParts[nameParts.length - 1] || '';
         const middleName = nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '';
-
         const flwData = {
             email: userData.email,
             name: {
@@ -47,7 +46,6 @@ const createFlutterwaveCustomer = async (userData) => {
         };
 
         const response = await createCustomer(flwData);
-        
         if (response.status === 'success' && response.data?.id) {
             console.log(`Flutterwave customer created: ${response.data.id}`);
             return response.data.id;

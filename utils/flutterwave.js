@@ -5,6 +5,7 @@ const User = require('../models/User');
 const FLW_CLIENT_ID = process.env.FLW_CLIENT_ID
 const FLW_CLIENT_SECRET = process.env.FLW_CLIENT_SECRET
 const FLW_BASE_URL = process.env.FLW_BASE_URL;
+const shouldLogTokenStatus = process.env.FLW_DEBUG_LOGS === 'true';
 let accessToken = null;
 let expiresIn = 0;
 let lastTokenRefreshTime = 0;
@@ -27,7 +28,7 @@ async function refreshToken() {
     accessToken = response.data.access_token;
     expiresIn = response.data.expires_in;
     lastTokenRefreshTime = Date.now();
-    console.log('Expires in:', expiresIn, 'seconds');
+    // console.log('Expires in:', expiresIn, 'seconds');
   } catch (error) {
     console.error('Error refreshing token:', error.response ? error.response.data : error.message);
   }
@@ -41,12 +42,12 @@ async function ensureTokenIsValid() {
   if (!accessToken || timeLeft < 60) { // refresh if less than 1 minute remains
     console.log('Refreshing token...');
     await refreshToken();
-  } else {
+  } else if (shouldLogTokenStatus) {
     console.log(`Token is still valid for ${Math.floor(timeLeft)} seconds.`);
   }
 }
 
-setInterval(ensureTokenIsValid, 50000); // check every 5 seconds
+setInterval(ensureTokenIsValid, 50000); // check roughly every 50 seconds
 
 
 const directTransfer = async (data) => {
@@ -126,7 +127,7 @@ const createCustomer = async (data) => {
     };
 
     const response = await axios.post(
-      `${FLW_BASE_URL}/customers`,
+      `https://developer.flutterwave.com/reference/customers_create`,
       payload,
       {
         headers: {
@@ -136,13 +137,14 @@ const createCustomer = async (data) => {
         }
       }
     );
-
+    console.log('The response:', response.data);
     return {
       status: response.data.status,
       message: response.data.message,
       data: response.data.data
     };
   } catch (err) {
+    console.log('The error response:', err);
     console.error('Customer creation error:', err.response ? err.response.data : err.message);
     throw err.response ? err.response.data : err;
   }
@@ -180,6 +182,8 @@ const updateCustomer = async (customerId, data) => {
         }
       }
     );
+
+    console.log('Customer update response:', response.data);
 
     return {
       status: response.data.status,
