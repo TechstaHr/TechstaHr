@@ -75,11 +75,11 @@ const createProject = async (req, res) => {
               actions: [
                 {
                   label: 'Accept',
-                  url: `https://techstahr.onrender.com/api/v1/project/accept-invite/${newProject._id}`,
+                  url: `https://techstahr-backend.onrender.com/api/v1/project/accept-invite/${newProject._id}`,
                 },
                 {
                   label: 'Reject',
-                  url: `https://techstahr.onrender.com/api/v1/project/reject-invite/${newProject._id}`,
+                  url: `https://techstahr-backend.onrender.com/api/v1/project/reject-invite/${newProject._id}`,
                 },
               ],
             });
