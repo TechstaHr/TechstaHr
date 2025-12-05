@@ -303,6 +303,20 @@ const rejectProjectInvite = async (req, res) => {
     }
 
     member.status = "declined";
+    const isMember = project.teamMembers.some(
+      (member) => member?.user?.toString() === teamMemberId
+    );
+
+    if (!isMember) {
+      return res
+        .status(400)
+        .json({ message: "User is not a team member of this project." });
+    }
+
+    project.teamMembers = project.teamMembers.filter(
+      (member) => member?.user?.toString() !== teamMemberId
+    );
+
     await project.save();
 
     res
