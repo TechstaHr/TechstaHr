@@ -50,10 +50,10 @@ const createProject = async (req, res) => {
     });
 
     if (!newProject.teamMembers.some((m) => m.user.toString() === req.user.id)) {
-     
+
       newProject.teamMembers.unshift({ user: req.user.id, status: "accepted" });
     } else {
-      
+
       newProject.teamMembers = newProject.teamMembers.map((m) =>
         m.user.toString() === req.user.id ? { ...m, status: "accepted" } : m
       );
@@ -174,11 +174,11 @@ const assignTeamMembers = async (req, res) => {
           actions: [
             {
               label: 'Accept',
-              url: `https://techstahr.onrender.com/api/v1/project/accept-invite/${project._id}`,
+              url: `https://techstahr-backend.onrender.com/api/v1/project/accept-invite/${project._id}`,
             },
             {
               label: 'Reject',
-              url: `https://techstahr.onrender.com/api/v1/project/reject-invite/${project._id}`,
+              url: `https://techstahr-backend.onrender.com/api/v1/project/reject-invite/${project._id}`,
             },
           ],
         });
@@ -1112,9 +1112,9 @@ const getPendingInvitations = async (req, res) => {
       team: teamId,
       "teamMembers.status": "pending"
     })
-    .populate("teamMembers.user", "full_name email avatar")
-    .populate("createdBy", "full_name email avatar")
-    .select("name description teamMembers createdBy");
+      .populate("teamMembers.user", "full_name email avatar")
+      .populate("createdBy", "full_name email avatar")
+      .select("name description teamMembers createdBy");
 
     const pendingInvitations = projects.map(project => {
       const pendingMembers = project.teamMembers.filter(
