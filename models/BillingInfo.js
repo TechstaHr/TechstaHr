@@ -7,32 +7,29 @@ const billingInfoSchema = new mongoose.Schema({
         ref: 'User',
         unique: true
     },
-    companyName: { type: String, required: true },
-    taxId: { type: String, required: true },
-    billingEmail: { type: String, required: true, match: /.+\@.+\..+/ },
-    phoneNumber: { type: String, required: true },
+    companyName: { type: String },
+    taxId: { type: String },
+    billingEmail: { type: String, match: /.+\@.+\..+/ },
+    phoneNumber: { type: String },
     address: {
-        street: { type: String, required: true },
-        city: { type: String, required: true },
-        state: { type: String, required: true },
-        postalCode: { type: String, required: true },
-        country: { type: String, required: true }
+        street: { type: String },
+        city: { type: String },
+        state: { type: String },
+        postal_code: { type: String },
+        country: { type: String }
     },
     bankDetail: {
-        currency: { type: String, required: true },
-        accountName: { type: String, required: true },
-        accountNumber: { type: String, required: true },
+        currency: { type: String },
+        accountName: { type: String },
+        accountNumber: { type: String },
         bankId: {
             type: mongoose.Schema.Types.ObjectId,
-            required: true,
-            ref: 'Bank',
-            unique: true
+            ref: 'Bank'
         },
     },
     payRate: {
         type: String,
-        enum: ['hourly', 'weekly', 'monthly'],
-        required: true
+        enum: ['hourly', 'weekly', 'monthly']
     }
 }, { timestamps: true });
 

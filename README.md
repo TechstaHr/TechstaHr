@@ -90,3 +90,8 @@ async function uploadScreenshotToServer(screenshotFile, taskId) {
   }
 }
 ```
+
+
+### Run flutterwave webhook
+- Run the app (if it's not running already): `npm run start`
+- 

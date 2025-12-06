@@ -36,5 +36,12 @@ router.post('/banks/add', authenticateToken, authorizeAdmin, async (req, res) =>
     res.status(500).json({ message: 'Internal server error' });
   }
 });
+// Payment Methods Management
+router.post('/payment-methods', authenticateToken, billingCtrl.createPaymentMethod);
+router.get('/payment-methods', authenticateToken, billingCtrl.getPaymentMethods);
+router.patch('/payment-methods/:paymentMethodId/default', authenticateToken, billingCtrl.setDefaultPaymentMethod);
+router.delete('/payment-methods/:paymentMethodId', authenticateToken, billingCtrl.deletePaymentMethod);
+// Charges Management
+router.post('/charges', authenticateToken, authorizeAdmin, billingCtrl.createCharge);
 
 module.exports = router;

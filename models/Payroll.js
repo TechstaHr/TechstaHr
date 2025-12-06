@@ -5,13 +5,13 @@ const PayrollSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     required: true,
     ref: 'User',
-    unique: true
+    index: true
   },
   bankId: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
     ref: 'Bank',
-    unique: true
+    index: true
   },
   narration: { type: String, required: false },
   paymentAmount: { type: Number, required: true },
