@@ -6,29 +6,21 @@ const PaymentMethodSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
-    
-    // Payment provider
     provider: {
         type: String,
         enum: ['flutterwave', 'paystack', 'stripe', 'paypal'],
         default: 'flutterwave',
         required: true
     },
-    
-    // Provider-specific payment method ID (works for all providers)
     provider_payment_method_id: {
         type: String,
         required: true
     },
-    
-    // Payment method type
     type: {
         type: String,
-        enum: ['card', 'bank', 'mobile_money', 'ussd', 'opay'],
+        enum: ['card', 'bank', 'bank_account', 'mobile_money', 'ussd', 'opay'],
         required: true
     },
-    
-    // For cards
     card: {
         last4: String,              // Last 4 digits
         brand: String,              // Visa, Mastercard, etc.
@@ -36,28 +28,24 @@ const PaymentMethodSchema = new mongoose.Schema({
         expiry_year: String,
         card_holder_name: String
     },
-    
-    // For bank accounts
     bank: {
         account_number_last4: String,
         bank_name: String,
-        account_name: String
+        account_name: String,
+        bank_code: String
     },
     
-    // Default payment method flag
     is_default: {
         type: Boolean,
         default: false
     },
     
-    // Status
     is_active: {
         type: Boolean,
         default: true
     },
     
-    // Metadata from Flutterwave
-    flw_metadata: {
+    metadata: {
         type: mongoose.Schema.Types.Mixed,
         default: {}
     },

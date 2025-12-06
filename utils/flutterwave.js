@@ -4,7 +4,15 @@ const User = require('../models/User');
 
 const FLW_CLIENT_ID = process.env.FLW_CLIENT_ID
 const FLW_CLIENT_SECRET = process.env.FLW_CLIENT_SECRET
-const FLW_BASE_URL = process.env.FLW_BASE_URL;
+const DEFAULT_FLW_BASE_URL = 'https://developersandbox-api.flutterwave.com';
+const configuredBaseUrl = process.env.FLW_BASE_URL;
+const FLW_BASE_URL = configuredBaseUrl?.includes('api.flutterwave.cloud/developersandbox')
+  ? DEFAULT_FLW_BASE_URL
+  : configuredBaseUrl || DEFAULT_FLW_BASE_URL;
+
+if (configuredBaseUrl && configuredBaseUrl !== FLW_BASE_URL) {
+  console.warn(`FLW_BASE_URL override: using ${FLW_BASE_URL} instead of ${configuredBaseUrl}`);
+}
 const shouldLogTokenStatus = process.env.FLW_DEBUG_LOGS === 'true';
 let accessToken = null;
 let expiresIn = 0;
@@ -28,7 +36,7 @@ async function refreshToken() {
     accessToken = response.data.access_token;
     expiresIn = response.data.expires_in;
     lastTokenRefreshTime = Date.now();
-    // console.log('Expires in:', expiresIn, 'seconds');
+    // console.log('Access token refreshed:', accessToken);
   } catch (error) {
     console.error('Error refreshing token:', error.response ? error.response.data : error.message);
   }
@@ -40,14 +48,14 @@ async function ensureTokenIsValid() {
   const timeLeft = expiresIn - timeSinceLastRefresh;
 
   if (!accessToken || timeLeft < 60) { // refresh if less than 1 minute remains
-    console.log('Refreshing token...');
+    console.log('Refreshing token...' );
     await refreshToken();
   } else if (shouldLogTokenStatus) {
     console.log(`Token is still valid for ${Math.floor(timeLeft)} seconds.`);
   }
 }
 
-setInterval(ensureTokenIsValid, 50000); // check roughly every 50 seconds
+setInterval(ensureTokenIsValid, 500); // check roughly every 50 seconds
 
 
 const directTransfer = async (data) => {
@@ -119,21 +127,25 @@ const createCustomer = async (data) => {
   try {
     await ensureTokenIsValid();
 
+    // Build payload with only provided fields
     const payload = {
-      address: data.address,
-      name: data.name,
-      phone: data.phone,
-      email: data.email
+      email: data.email,
+      address: data.address
     };
 
+    // Only add optional fields if they are provided
+    if (data.name) payload.name = data.name;
+    if (data.phone) payload.phone = data.phone;
+    
     const response = await axios.post(
-      `https://developer.flutterwave.com/reference/customers_create`,
+      `${FLW_BASE_URL}/customers`,
       payload,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
+          'Accept': 'application/json',
           'Content-Type': 'application/json',
-          'X-Trace-Id': data.traceId
+          'X-Trace-Id': data.traceId || generateId()
         }
       }
     );
@@ -144,9 +156,30 @@ const createCustomer = async (data) => {
       data: response.data.data
     };
   } catch (err) {
-    console.log('The error response:', err);
-    console.error('Customer creation error:', err.response ? err.response.data : err.message);
-    throw err.response ? err.response.data : err;
+    // If customer already exists, try to fetch and return it instead of failing hard
+    if (err?.response?.status === 409 && err?.response?.data?.error?.message?.toLowerCase().includes('already exists')) {
+      try {
+        const existing = await searchCustomer({
+          email: data.email,
+          traceId: data.traceId || generateId(),
+          page: 1,
+          size: 1
+        });
+
+        if (existing?.data?.length) {
+          return {
+            status: 'success',
+            message: 'Customer already exists',
+            data: existing.data[0]
+          };
+        }
+      } catch (searchErr) {
+        console.error('Customer exists but lookup failed:', searchErr?.response?.data || searchErr.message);
+      }
+    }
+
+    console.error('Customer creation error:', err?.response?.data || err.message);
+    throw err?.response?.data || err;
   }
 };
 
@@ -178,6 +211,7 @@ const updateCustomer = async (customerId, data) => {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
           'X-Trace-Id': data.traceId
         }
       }
@@ -209,29 +243,33 @@ const searchCustomer = async (searchData) => {
   try {
     await ensureTokenIsValid();
 
-    const page = searchData.page || 1;
-    const size = searchData.size || 10;
-
-    const response = await axios.post(
-      `${FLW_BASE_URL}/customers/search?page=${page}&size=${size}`,
-      {
-        email: searchData.email
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          'X-Trace-Id': searchData.traceId
-        }
+    const response = await axios.get(`${FLW_BASE_URL}/customers`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Trace-Id': searchData.traceId
       }
-    );
+    });
+
+    const customers = response.data.data || [];
+    const filtered = searchData.email
+      ? customers.filter((cust) => cust?.email?.toLowerCase() === searchData.email.toLowerCase())
+      : customers;
 
     return {
       status: response.data.status,
       message: response.data.message,
-      data: response.data.data
+      data: filtered
     };
   } catch (err) {
+    if (err?.response?.status === 404 || err?.response?.data?.error?.code === '1201404') {
+      return {
+        status: 'success',
+        message: 'Customer not found',
+        data: []
+      };
+    }
     console.error('Customer search error:', err.response ? err.response.data : err.message);
     throw err.response ? err.response.data : err;
   }
@@ -252,47 +290,58 @@ const addPaymentMethod = async (data) => {
   try {
     await ensureTokenIsValid();
 
-    const {
-      type, // "card" or "bank"
-      userId,
+    let {
+      type, // "card" or "bank_account"
+      customer_id,
       card,
-      bank,
+      bank_account,
       meta,
     } = data;
 
-    if (!type || (type !== 'card' && type !== 'bank')) {
-      throw new Error('addPaymentMethod: "type" is required and must be either "card" or "bank".');
+    // Auto-detect type if not provided based on what data is present
+    if (!type) {
+      if (bank_account) {
+        type = 'bank_account';
+      } else if (card) {
+        type = 'card';
+      }
     }
 
-    if (!userId) {
-      throw new Error('addPaymentMethod: "userId" is required.');
+    if (!type || !['card', 'bank_account'].includes(type)) {
+      throw new Error('addPaymentMethod: "type" is required and must be either "card" or "bank_account".');
     }
 
-    // Look up user and get their Flutterwave customer ID
-    const user = await User.findById(userId).select('flw_customer_id email');
-    if (!user) {
-      throw new Error('addPaymentMethod: User not found.');
-    }
-    if (!user.flw_customer_id) {
-      throw new Error('addPaymentMethod: User does not have a Flutterwave customer ID. Please update profile first.');
+    if (!customer_id) {
+      throw new Error('addPaymentMethod: "customer_id" is required.');
     }
 
     const payload = {
       type,
-      customer_id: user.flw_customer_id
+      customer_id
     };
 
-    if (type === 'card' && card) {
+    // Add card details for card type
+    if (type === 'card') {
+      if (!card || !card.nonce || !card.encrypted_card_number || !card.encrypted_expiry_month || 
+          !card.encrypted_expiry_year || !card.encrypted_cvv) {
+        throw new Error('addPaymentMethod: Card requires nonce, encrypted_card_number, encrypted_expiry_month, encrypted_expiry_year, and encrypted_cvv');
+      }
       payload.card = card;
     }
 
-    if (type === 'bank' && bank) {
-      payload.bank = bank;
+    // Add bank account details for bank_account type
+    if (type === 'bank_account') {
+      if (!bank_account || !bank_account.name || !bank_account.number || !bank_account.bank_code) {
+        throw new Error('addPaymentMethod: Bank account requires name, number, and bank_code');
+      }
+      payload.bank_account = bank_account;
     }
 
     if (meta) {
       payload.meta = meta;
     }
+
+    console.log('Adding payment method with payload:', JSON.stringify({ ...payload, card: payload.card ? '***ENCRYPTED***' : undefined }, null, 2));
 
     const headers = {
       Authorization: `Bearer ${accessToken}`,
@@ -306,6 +355,8 @@ const addPaymentMethod = async (data) => {
       payload,
       { headers }
     );
+
+    console.log('Payment method created:', response.data);
 
     return {
       status: response.data.status,
@@ -329,8 +380,11 @@ const addPaymentMethod = async (data) => {
  * @param {string} data.currency - Currency code (e.g., USD, NGN)
  * @param {string} data.payment_method_id - Payment method ID
  * @param {string} data.redirect_url - URL to redirect after payment
- * @param {number} data.amount - Amount to charge
+ * @param {number} data.amount - Amount to charge (must be greater than 200)
  * @param {Object} data.meta - Additional metadata (optional)
+ * @param {Object} data.authorization - Optional authorization block (e.g., { otp: { code }, type: "otp" })
+ * @param {boolean} data.recurring - Whether this charge is recurring (optional)
+ * @param {string} data.order_id - Order identifier (auto-generated if not provided)
  * @returns {Object} Charge initiation response with next_action
  * next_action types: requires_pin, requires_otp, redirect_url, requires_additional_fields, payment_Instructions
  */
@@ -345,7 +399,10 @@ const initiateCharge = async (data) => {
       payment_method_id,
       redirect_url,
       amount,
-      meta
+      meta,
+      authorization,
+      recurring,
+      order_id
     } = data;
 
     if (!userId) {
@@ -354,6 +411,11 @@ const initiateCharge = async (data) => {
 
     if (!reference || !currency || !payment_method_id || !redirect_url || !amount) {
       throw new Error('initiateCharge: reference, currency, payment_method_id, redirect_url, and amount are required.');
+    }
+
+    // Validate amount is greater than 200
+    if (amount <= 200) {
+      throw new Error('initiateCharge: amount must be greater than 200.');
     }
 
     // Look up user and get their Flutterwave customer ID
@@ -365,16 +427,37 @@ const initiateCharge = async (data) => {
       throw new Error('initiateCharge: User does not have a Flutterwave customer ID. Please update profile first.');
     }
 
+    // Auto-generate order_id if not provided
+    const generatedOrderId = order_id || `ord_${crypto.randomBytes(6).toString('hex')}`;
+
+    // Format reference: replace spaces with hyphens
+    const formattedReference = reference.replace(/\s+/g, '-');
+
     const payload = {
-      reference,
+      reference: formattedReference,
       currency,
       customer_id: user.flw_customer_id,
       payment_method_id,
       redirect_url,
-      amount
+      amount,
+      order_id: generatedOrderId
     };
 
     if (meta) payload.meta = meta;
+    
+    // Handle authorization - auto-generate OTP code if type is otp and code not provided
+    if (authorization) {
+      const auth = { ...authorization };
+      if (auth.type === 'otp' && auth.otp && !auth.otp.code) {
+        // Generate 4-8 digit OTP code
+        const codeLength = Math.floor(Math.random() * 5) + 4; // Random between 4 and 8
+        auth.otp.code = crypto.randomInt(10 ** (codeLength - 1), 10 ** codeLength).toString();
+        console.log('Auto-generated OTP code (length:', codeLength, ', code:', auth.otp.code, ')');
+      }
+      payload.authorization = auth;
+    }
+    
+    if (typeof recurring === 'boolean') payload.recurring = recurring;
 
     const response = await axios.post(
       `${FLW_BASE_URL}/charges`,
@@ -401,26 +484,34 @@ const initiateCharge = async (data) => {
 };
 
 /**
- * Authorize a charge with additional authentication details (PIN, OTP, etc.)
+ * Authorize/update a charge with auth data (PIN, OTP, external_3ds, etc.)
  * @param {string} chargeId - The charge ID to authorize
  * @param {Object} data - Authorization data
- * @param {string} data.pin - Card PIN (if next_action was requires_pin)
- * @param {string} data.otp - One-time password (if next_action was requires_otp)
- * @param {Object} data.additional_fields - Additional fields (if next_action was requires_additional_fields)
+ * @param {Object} data.authorization - Authorization block e.g. { type: 'otp', otp: { code } } or { type: 'pin', pin: { nonce, encrypted_pin } } or { type: 'external_3ds', external_3ds: { transaction_status } }
+ * @param {Object} data.meta - Optional meta payload
  * @param {string} data.traceId - Unique trace ID
  * @returns {Object} Charge authorization response
  */
-const authorizeCharge = async (chargeId, data) => {
+const updateCharge = async (chargeId, data) => {
   try {
     await ensureTokenIsValid();
 
     const payload = {};
-    if (data.pin) payload.pin = data.pin;
-    if (data.otp) payload.otp = data.otp;
-    if (data.additional_fields) payload.additional_fields = data.additional_fields;
+
+    // Preferred new structure
+    if (data.authorization) {
+      payload.authorization = data.authorization;
+    }
+
+    // Backwards compatibility for legacy fields
+    if (data.pin && !payload.authorization) payload.pin = data.pin;
+    if (data.otp && !payload.authorization) payload.otp = data.otp;
+    if (data.additional_fields && !payload.authorization) payload.additional_fields = data.additional_fields;
+
+    if (data.meta) payload.meta = data.meta;
 
     const response = await axios.post(
-      `${FLW_BASE_URL}/charges/${chargeId}/authorize`,
+      `${FLW_BASE_URL}/charges/${chargeId}`,
       payload,
       {
         headers: {
@@ -442,6 +533,7 @@ const authorizeCharge = async (chargeId, data) => {
   }
 };
 
+
 module.exports = {
   directTransfer,
   createCustomer,
@@ -449,5 +541,5 @@ module.exports = {
   searchCustomer,
   addPaymentMethod,
   initiateCharge,
-  authorizeCharge
+  updateCharge,
 }

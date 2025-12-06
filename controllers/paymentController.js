@@ -1,71 +1,17 @@
 const axios = require('axios');
 const crypto = require('crypto');
 const flutterwaveUtils = require('../utils/flutterwave');
+const ledger = require('../utils/ledger');
 const Payroll = require('../models/Payroll');
 const Bank = require('../models/Bank');
 const BillingInfo = require('../models/BillingInfo');
+const User = require('../models/User');
+const Charge = require('../models/Charge');
 const { logWebhook } = require('../utils/webhook-logger');
 
 const PAYSTACK_SECRET_KEY = process.env.PYS_SECRET_KEY;
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
 const FLW_WEBHOOK_SECRET = process.env.FLW_WEBHOOK_SECRET;
-
-const initializePayment = async (req, res) => {
-    const { email, amount, frontend_callback_url } = req.body;
-
-    if(!email || !amount){
-        return res.status(400).json({
-            message: 'Email and amount are required'
-        });
-    }
-    try {
-        const response = await axios.post(`${PAYSTACK_BASE_URL}/transaction/initialize`, {
-            email,
-            amount: amount * 100,
-            callback_url: frontend_callback_url + '/verify-payment',
-            }, {
-                headers: {
-                    Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            res.status(200).json({
-                message: 'Transaction initialized',
-                data: response.data.data,
-            }
-        );
-
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({
-            message: 'Payment initialization failed',
-            error: error.response?.data || error.message,
-        });
-    }
-};
-
-const verifyPayment = async (req, res) => {
-    const { reference } = req.params;
-
-    try {
-        const response = await axios.get(`${PAYSTACK_BASE_URL}/transaction/verify/${reference}`, {
-            headers: {
-                Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-            },
-        });
-
-            res.status(200).json({
-                message: 'Payment verified',
-                data: response.data.data,
-            }
-        );
-    } catch (error) {
-        res.status(500).json({
-            message: 'Payment verification failed',
-            error: error.response?.data || error.message,
-        });
-    }
-};
 
 const triggerPayment = async (req, res) => {
   try {
@@ -102,7 +48,30 @@ const triggerPayment = async (req, res) => {
       idempotencyKey: existingPayroll.idempotencyKey,
       reference: existingPayroll.trxReference,
     };
+    // Ensure wallet has sufficient funds before initiating transfer
+    const wallet = await ledger.ensureWallet(existingPayroll.userId, existingBank.currency);
+    if ((wallet.available_balance || 0) < existingPayroll.paymentAmount) {
+      return res.status(400).json({ message: "Insufficient wallet balance for payout." });
+    }
+
     const response = await flutterwaveUtils.directTransfer(data);
+
+    // Debit wallet only after successful initiation
+    try {
+      await ledger.debitAvailable({
+        userId: existingPayroll.userId,
+        currency: existingBank.currency,
+        amount: existingPayroll.paymentAmount,
+        type: 'payout',
+        reference: existingPayroll.trxReference,
+        external_id: existingPayroll._id.toString(),
+        metadata: { payrollId: existingPayroll._id }
+      });
+    } catch (walletErr) {
+      console.error('Failed to debit wallet after transfer initiation:', walletErr);
+      // Optionally, you might want to flag this payout for review/refund if debit fails
+    }
+
     existingPayroll.paymentStatus = "initiated";
     await existingPayroll.save();
     res.status(200).json(response);
@@ -159,6 +128,103 @@ const flutterwaveWebhook = async (req, res) => {
     }
 
     const eventType = event.type || event['event.type'];
+
+    if (event.type === 'charge.completed') {
+      if (!event.data) {
+        console.error('Missing event.data in charge.completed webhook');
+        return res.status(400).json({ message: 'Missing event data' });
+      }
+
+      const { id: chargeId, status, customer, amount, currency, reference } = event.data;
+      
+      console.log('Charge webhook received:', { chargeId, status, customer_id: customer?.id, amount, currency });
+
+      if (status !== 'succeeded') {
+        console.log('Charge not succeeded, status:', status);
+        return res.status(200).json({ message: 'Charge not succeeded yet', status });
+      }
+
+      if (!customer?.id) {
+        console.error('Missing customer.id in charge webhook');
+        return res.status(400).json({ message: 'Missing customer ID' });
+      }
+      const user = await User.findOne({ flw_customer_id: customer.id }).select('_id email');
+      
+      if (!user) {
+        console.error('No user found for flw_customer_id:', customer.id);
+        return res.status(404).json({ message: 'User not found for customer ID' });
+      }
+
+      console.log('Found user:', user._id, user.email);
+
+      const existingCharge = await Charge.findOne({ flw_charge_id: chargeId });
+      
+      if (existingCharge && existingCharge.status === 'succeeded') {
+        console.log('Charge already processed:', chargeId);
+        return res.status(200).json({ message: 'Charge already processed' });
+      }
+
+      try {
+        await Charge.findOneAndUpdate(
+          { flw_charge_id: chargeId },
+          {
+            $set: {
+              user: user._id,
+              customer_id: customer.id,
+              flw_charge_id: chargeId,
+              reference: reference || event.data.reference,
+              amount,
+              currency,
+              status: 'succeeded',
+              settled: event.data.settled,
+              settlement_id: event.data.settlement_id,
+              processor_response: event.data.processor_response,
+              meta: event.data.meta,
+              fees: event.data.fees,
+              raw: event.data,
+              payment_method_provider_id: event.data.payment_method?.id
+            }
+          },
+          { upsert: true, new: true }
+        );
+      } catch (chargeErr) {
+        console.error('Failed to update charge record:', chargeErr);
+        // Continue to credit wallet even if charge update fails
+      }
+
+      // Credit user's wallet
+      try {
+        await ledger.creditAvailable({
+          userId: user._id,
+          currency,
+          amount,
+          type: 'charge',
+          reference: reference || chargeId,
+          external_id: chargeId,
+          metadata: { 
+            charge_id: chargeId,
+            customer_id: customer.id,
+            webhook_id: event.webhook_id,
+            source: 'webhook'
+          }
+        });
+        
+        console.log(`✓ Wallet credited: ${amount} ${currency} for user ${user._id}`);
+        return res.status(200).json({ 
+          message: 'Charge processed and wallet credited', 
+          chargeId,
+          amount,
+          currency,
+          userId: user._id
+        });
+      } catch (walletErr) {
+        console.error('Failed to credit wallet:', walletErr);
+        return res.status(500).json({ 
+          message: 'Charge recorded but wallet credit failed',
+          error: walletErr.message 
+        });
+      }
+    }
 
     if (event.type === 'transfer.disburse') {
       if (!event.data) {
@@ -223,8 +289,6 @@ const flutterwaveWebhook = async (req, res) => {
 
 
 module.exports = {
-    initializePayment,
-    verifyPayment,
     triggerPayment,
     flutterwaveWebhook,
 };

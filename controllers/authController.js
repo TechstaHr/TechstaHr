@@ -1,6 +1,7 @@
 const User = require("../models/User");
 const Team = require("../models/Team");
 const TokenBlacklist = require("../models/TokenBlacklist");
+const BillingInfo = require("../models/BillingInfo");
 const OtpEmail = require("../emails/OtpEmail.jsx");
 const InviteEmail = require("../emails/InviteEmail.jsx");
 const WelcomeOnboardEmail = require("../emails/WelcomeOnboardEmail.jsx");
@@ -19,31 +20,19 @@ require('dotenv').config();
  */
 const createFlutterwaveCustomer = async (userData) => {
     try {
-        const nameParts = userData.full_name?.split(' ') || ['', ''];
-        const firstName = nameParts[0] || '';
-        const lastName = nameParts[nameParts.length - 1] || '';
-        const middleName = nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '';
         const flwData = {
             email: userData.email,
-            name: {
-                first: firstName,
-                middle: middleName,
-                last: lastName
-            },
-            phone: {
-                country_code: userData.phone_country_code || "234",
-                number: userData.phone_number || ""
-            },
             address: {
-                city: userData.city || "",
-                country: userData.country || "NG",
-                line1: userData.address_line1 || "",
-                line2: userData.address_line2 || "",
-                postal_code: userData.postal_code || "",
-                state: userData.state || ""
+                city: userData.address?.city || "",
+                country: userData.address?.country || "NG",
+                line1: userData.address?.street || "",
+                postal_code: userData.address?.postal_code || "",
+                state: userData.address?.state || ""
             },
             traceId: crypto.randomBytes(16).toString('hex')
         };
+
+        console.log('Flutterwave customer data being sent:', JSON.stringify(flwData, null, 2));
 
         const response = await createCustomer(flwData);
         if (response.status === 'success' && response.data?.id) {
@@ -60,10 +49,20 @@ const createFlutterwaveCustomer = async (userData) => {
 };
 
 const createAdmin = async (req, res) => {
-    const { email, password, full_name, role_title } = req.body;
+    const { email, password, full_name, role_title, address } = req.body;
 
     if (!email || !password || !full_name || !role_title) {
         return res.status(400).json({ message: "Email, password, full name, and role title are required" });
+    }
+
+    if (address) {
+        const requiredAddressFields = ['street', 'city', 'state', 'postal_code', 'country'];
+        const missingFields = requiredAddressFields.filter(field => !address[field]);
+        if (missingFields.length > 0) {
+            return res.status(400).json({ 
+                message: `Address is incomplete. Missing fields: ${missingFields.join(', ')}` 
+            });
+        }
     }
 
     try {
@@ -75,8 +74,11 @@ const createAdmin = async (req, res) => {
 
         const hashedPassword = await hashPassword(password);
 
-        // Create Flutterwave customer
-        const flwCustomerId = await createFlutterwaveCustomer({ email, full_name });
+        // Create Flutterwave customer if address is provided
+        let flwCustomerId = null;
+        if (address) {
+            flwCustomerId = await createFlutterwaveCustomer({ email, full_name, address });
+        }
 
         const newAdmin = new User({
             email,
@@ -90,6 +92,26 @@ const createAdmin = async (req, res) => {
         });
 
         await newAdmin.save();
+
+        // Create or update billing info with address if provided
+        if (address) {
+            try {
+                const existingBilling = await BillingInfo.findOne({ userId: newAdmin._id });
+                if (existingBilling) {
+                    existingBilling.address = address;
+                    await existingBilling.save();
+                } else {
+                    const billingInfo = new BillingInfo({
+                        userId: newAdmin._id,
+                        address: address
+                    });
+                    await billingInfo.save();
+                }
+            } catch (billingError) {
+                console.error("Error creating/updating billing info:", billingError);
+                // Continue even if billing info creation fails
+            }
+        }
 
         // Send welcome email
         try {
@@ -125,10 +147,21 @@ const createAdmin = async (req, res) => {
 };
 
 const createUserByAdmin = async (req, res) => {
-    const { email, password, role, full_name, role_title } = req.body;
+    const { email, password, role, full_name, role_title, address } = req.body;
 
     if (!email || !password || !role || !full_name || !role_title) {
         return res.status(400).json({ message: "Email, full name, role title, password, and role are required" });
+    }
+
+    // Validate address if provided
+    if (address) {
+        const requiredAddressFields = ['street', 'city', 'state', 'postal_code', 'country'];
+        const missingFields = requiredAddressFields.filter(field => !address[field]);
+        if (missingFields.length > 0) {
+            return res.status(400).json({ 
+                message: `Address is incomplete. Missing fields: ${missingFields.join(', ')}` 
+            });
+        }
     }
 
     const validRoles = ['admin', 'team'];
@@ -145,8 +178,11 @@ const createUserByAdmin = async (req, res) => {
 
         const hashedPassword = await hashPassword(password);
 
-        // Create Flutterwave customer
-        const flwCustomerId = await createFlutterwaveCustomer({ email, full_name });
+        // Create Flutterwave customer if address is provided
+        let flwCustomerId = null;
+        if (address) {
+            flwCustomerId = await createFlutterwaveCustomer({ email, full_name, address });
+        }
 
         const newUser = new User({
             email,
@@ -160,6 +196,25 @@ const createUserByAdmin = async (req, res) => {
         });
 
         await newUser.save();
+
+        // Create or update billing info with address if provided
+        if (address) {
+            try {
+                const existingBilling = await BillingInfo.findOne({ userId: newUser._id });
+                if (existingBilling) {
+                    existingBilling.address = address;
+                    await existingBilling.save();
+                } else {
+                    const billingInfo = new BillingInfo({
+                        userId: newUser._id,
+                        address: address
+                    });
+                    await billingInfo.save();
+                }
+            } catch (billingError) {
+                console.error("Error creating/updating billing info:", billingError);
+            }
+        }
 
         // Send welcome email
         try {
@@ -353,10 +408,21 @@ const resendInvite = async (req, res) => {
 };
 
 const signup = async (req, res) => {
-    const { email, password, full_name, team_name } = req.body;
+    const { email, password, full_name, team_name, address } = req.body;
 
     if (!email || !password || !team_name) {
         return res.status(400).json({ message: "All fields are required" });
+    }
+
+    // Validate address if provided
+    if (address) {
+        const requiredAddressFields = ['street', 'city', 'state', 'postal_code', 'country'];
+        const missingFields = requiredAddressFields.filter(field => !address[field]);
+        if (missingFields.length > 0) {
+            return res.status(400).json({ 
+                message: `Address is incomplete. Missing fields: ${missingFields.join(', ')}` 
+            });
+        }
     }
 
     try {
@@ -376,8 +442,11 @@ const signup = async (req, res) => {
 
         const hashedPassword = await hashPassword(password);
 
-        // Create Flutterwave customer
-        const flwCustomerId = await createFlutterwaveCustomer({ email: normalizedEmail, full_name });
+        // Create Flutterwave customer if address is provided
+        let flwCustomerId = null;
+        if (address) {
+            flwCustomerId = await createFlutterwaveCustomer({ email: normalizedEmail, full_name, address });
+        }
 
         const newUser = new User({
             email: normalizedEmail,
@@ -389,6 +458,20 @@ const signup = async (req, res) => {
         });
 
         await newUser.save();
+
+        // Create or update billing info with address if provided
+        if (address) {
+            try {
+                const billingInfo = new BillingInfo({
+                    userId: newUser._id,
+                    address: address
+                });
+                await billingInfo.save();
+            } catch (billingError) {
+                console.error("Error creating billing info:", billingError);
+                // Continue even if billing info creation fails
+            }
+        }
 
         // Send welcome email
         try {

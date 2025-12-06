@@ -41,7 +41,10 @@ router.post('/payment-methods', authenticateToken, billingCtrl.createPaymentMeth
 router.get('/payment-methods', authenticateToken, billingCtrl.getPaymentMethods);
 router.patch('/payment-methods/:paymentMethodId/default', authenticateToken, billingCtrl.setDefaultPaymentMethod);
 router.delete('/payment-methods/:paymentMethodId', authenticateToken, billingCtrl.deletePaymentMethod);
-// Initiate a charge on a payment method
-router.post('/initiate-charge', authenticateToken, billingCtrl.createCharge);
+// Charges Management
+router.post('/charges', authenticateToken, billingCtrl.createCharge);
+// router.get('/charges/:chargeId', authenticateToken, billingCtrl.getCharge);
+// router.post('/charges/:chargeId', authenticateToken, billingCtrl.updateCharge);
+// router.put('/charges/:chargeId/status', authenticateToken, billingCtrl.getChargeStatus);
 
 module.exports = router;

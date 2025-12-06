@@ -49,7 +49,6 @@ app.use((req, res, next) => {
   if (req.originalUrl.includes('flutterwave-webhook')) {
     console.log('🔔 WEBHOOK REQUEST DETECTED!');
   }
-  
   next();
 });
 
