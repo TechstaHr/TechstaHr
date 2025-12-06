@@ -7,10 +7,7 @@ const Bank = require('../models/Bank');
 const BillingInfo = require('../models/BillingInfo');
 const User = require('../models/User');
 const Charge = require('../models/Charge');
-const { logWebhook } = require('../utils/webhook-logger');
 
-const PAYSTACK_SECRET_KEY = process.env.PYS_SECRET_KEY;
-const PAYSTACK_BASE_URL = 'https://api.paystack.co';
 const FLW_WEBHOOK_SECRET = process.env.FLW_WEBHOOK_SECRET;
 
 const triggerPayment = async (req, res) => {
@@ -21,11 +18,20 @@ const triggerPayment = async (req, res) => {
       return res.status(404).json({ message: "Payroll entry not found." });
     }
 
+    // Prevent triggering payment that's already been initiated, completed, or failed
+    if (existingPayroll.paymentStatus !== 'scheduled') {
+      return res.status(400).json({ 
+        message: `Payment cannot be triggered. Current status: ${existingPayroll.paymentStatus}`,
+        currentStatus: existingPayroll.paymentStatus,
+        payrollId: existingPayroll._id
+      });
+    }
+
     if (existingPayroll.paymentGateway.toLowerCase().trim() !== "flutterwave") {
       return res.status(503).json({ message: "Couldn't process payment, only flutterwave is currently supported." });
     }
     if (existingPayroll.paymentDue > new Date()) {
-      return res.status(403).json({ message: "Pyament not due for processing." });
+      return res.status(403).json({ message: "Payment not due for processing." });
     }
 
     const existingBank = await Bank.findById(existingPayroll.bankId);
@@ -48,27 +54,36 @@ const triggerPayment = async (req, res) => {
       idempotencyKey: existingPayroll.idempotencyKey,
       reference: existingPayroll.trxReference,
     };
-    // Ensure wallet has sufficient funds before initiating transfer
-    const wallet = await ledger.ensureWallet(existingPayroll.userId, existingBank.currency);
-    if ((wallet.available_balance || 0) < existingPayroll.paymentAmount) {
-      return res.status(400).json({ message: "Insufficient wallet balance for payout." });
+    
+    // Check if the payer (logged-in user/admin/company) has sufficient funds
+    const payerId = req.user.id;
+    const payerWallet = await ledger.ensureWallet(payerId, existingBank.currency);
+    if ((payerWallet.available_balance || 0) < existingPayroll.paymentAmount) {
+      return res.status(400).json({ 
+        message: "Insufficient wallet balance for payout.",
+        available: payerWallet.available_balance,
+        required: existingPayroll.paymentAmount
+      });
     }
 
     const response = await flutterwaveUtils.directTransfer(data);
 
-    // Debit wallet only after successful initiation
+    // Debit the payer's wallet (not the employee's) after successful transfer initiation
     try {
       await ledger.debitAvailable({
-        userId: existingPayroll.userId,
+        userId: payerId,
         currency: existingBank.currency,
         amount: existingPayroll.paymentAmount,
         type: 'payout',
         reference: existingPayroll.trxReference,
         external_id: existingPayroll._id.toString(),
-        metadata: { payrollId: existingPayroll._id }
+        metadata: { 
+          payrollId: existingPayroll._id,
+          recipientUserId: existingPayroll.userId
+        }
       });
     } catch (walletErr) {
-      console.error('Failed to debit wallet after transfer initiation:', walletErr);
+      console.error('Failed to debit payer wallet after transfer initiation:', walletErr);
       // Optionally, you might want to flag this payout for review/refund if debit fails
     }
 
@@ -113,8 +128,6 @@ const verifyFlutterwaveSignature = (payload, signature) => {
 
 const flutterwaveWebhook = async (req, res) => {
   try{
-    // logWebhook('Webhook received', { headers: req.headers, body: req.body });
-
     const signature = req.headers['verif-hash'];
     if (signature && !verifyFlutterwaveSignature(req.body, signature)) {
       console.error('Invalid webhook signature');
@@ -157,15 +170,20 @@ const flutterwaveWebhook = async (req, res) => {
 
       console.log('Found user:', user._id, user.email);
 
+      // Idempotency: if already succeeded, skip; else update/create and credit once
       const existingCharge = await Charge.findOne({ flw_charge_id: chargeId });
-      
       if (existingCharge && existingCharge.status === 'succeeded') {
-        console.log('Charge already processed:', chargeId);
-        return res.status(200).json({ message: 'Charge already processed' });
+        console.log('⚠️ Charge already processed (duplicate webhook):', chargeId);
+        return res.status(200).json({ 
+          message: 'Charge already processed',
+          chargeId,
+          duplicate: true
+        });
       }
 
+      let chargeRecord;
       try {
-        await Charge.findOneAndUpdate(
+        chargeRecord = await Charge.findOneAndUpdate(
           { flw_charge_id: chargeId },
           {
             $set: {
@@ -182,17 +200,31 @@ const flutterwaveWebhook = async (req, res) => {
               meta: event.data.meta,
               fees: event.data.fees,
               raw: event.data,
-              payment_method_provider_id: event.data.payment_method?.id
+              payment_method_provider_id: event.data.payment_method?.id,
+              processed_at: new Date()
+            },
+            $setOnInsert: {
+              created_at: new Date()
             }
           },
           { upsert: true, new: true }
         );
+
+        if (!chargeRecord) {
+          console.log('⚠️ Charge could not be recorded:', chargeId);
+          return res.status(500).json({ message: 'Failed to record charge' });
+        }
+
+        console.log('Charge record created/updated:', chargeId);
       } catch (chargeErr) {
         console.error('Failed to update charge record:', chargeErr);
-        // Continue to credit wallet even if charge update fails
+        return res.status(500).json({ 
+          message: 'Failed to record charge',
+          error: chargeErr.message 
+        });
       }
 
-      // Credit user's wallet
+      // Only credit wallet if charge was newly processed
       try {
         await ledger.creditAvailable({
           userId: user._id,
@@ -219,8 +251,20 @@ const flutterwaveWebhook = async (req, res) => {
         });
       } catch (walletErr) {
         console.error('Failed to credit wallet:', walletErr);
+        
+        // If wallet credit fails, mark the charge as pending_credit for manual intervention
+        try {
+          await Charge.findOneAndUpdate(
+            { flw_charge_id: chargeId },
+            { $set: { status: 'pending_credit', credit_error: walletErr.message } }
+          );
+        } catch (updateErr) {
+          console.error('Failed to mark charge as pending_credit:', updateErr);
+        }
+        
         return res.status(500).json({ 
-          message: 'Charge recorded but wallet credit failed',
+          message: 'Charge recorded but wallet credit failed - requires manual intervention',
+          chargeId,
           error: walletErr.message 
         });
       }

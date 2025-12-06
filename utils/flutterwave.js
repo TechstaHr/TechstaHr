@@ -1,6 +1,10 @@
 const axios = require('axios');
 const crypto = require('crypto');
 const User = require('../models/User');
+const sendEmail = require('../services/send-email');
+const { renderToStaticMarkup } = require('react-dom/server');
+const React = require('react');
+const OtpEmail = require('../emails/OtpEmail.jsx');
 
 const FLW_CLIENT_ID = process.env.FLW_CLIENT_ID
 const FLW_CLIENT_SECRET = process.env.FLW_CLIENT_SECRET
@@ -92,6 +96,7 @@ const directTransfer = async (data) => {
         }
       }
     );
+    console.log('Transfer initiation response:', response.data);
     return {
       status: response.data.status,
       message: response.data.message,
@@ -453,6 +458,27 @@ const initiateCharge = async (data) => {
         const codeLength = Math.floor(Math.random() * 5) + 4; // Random between 4 and 8
         auth.otp.code = crypto.randomInt(10 ** (codeLength - 1), 10 ** codeLength).toString();
         console.log('Auto-generated OTP code (length:', codeLength, ', code:', auth.otp.code, ')');
+        
+        // Send OTP code via email to the user
+        try {
+          const otpEmailHtml = renderToStaticMarkup(
+            React.createElement(OtpEmail, {
+              full_name: user.fullName || user.email.split('@')[0],
+              otp: auth.otp.code
+            })
+          );
+          
+          await sendEmail({
+            to: user.email,
+            subject: 'Your Payment Authorization Code',
+            html: otpEmailHtml
+          });
+          
+          console.log('OTP email sent successfully to:', user.email);
+        } catch (emailError) {
+          console.error('Failed to send OTP email:', emailError.message);
+          // Don't throw - continue with charge even if email fails
+        }
       }
       payload.authorization = auth;
     }

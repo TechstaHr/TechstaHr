@@ -129,18 +129,27 @@ const getAllPayroll = async (req, res) => {
 
 const createBilling = async (req, res) => {
     try {
-        const userId = req.user.id;
+        // Allow admin to create/update billing for other users
+        let userId;
+        if (req.user.role === 'admin' && req.body.userId) {
+            userId = req.body.userId;
+            console.log('Admin creating/updating billing for user:', userId);
+        } else {
+            userId = req.user.id;
+        }
         
         let existing = await BillingInfo.findOne({ userId });
         let billing;
         let isNewRecord = false;
         
         if (existing) {
-            Object.assign(existing, req.body);
+            const { userId: _, ...updateData } = req.body;
+            Object.assign(existing, updateData);
             billing = await existing.save();
             console.log('Updated existing billing info for user:', userId);
         } else {
-            billing = new BillingInfo({ userId, ...req.body });
+            const { userId: _, ...billingData } = req.body;
+            billing = new BillingInfo({ userId, ...billingData });
             await billing.save();
             isNewRecord = true;
             console.log('Created new billing info for user:', userId);
@@ -196,7 +205,6 @@ const createBilling = async (req, res) => {
                             traceId: crypto.randomBytes(16).toString('hex')
                         });
 
-                        // Check if this is the user's first payment method to set as default
                         const existingPaymentMethods = await PaymentMethod.countDocuments({ 
                             user: userId, 
                             is_active: true 
@@ -229,8 +237,6 @@ const createBilling = async (req, res) => {
             } catch (paymentError) {
                 console.error('Error auto-creating payment method:', paymentError);
                 paymentMethodError = paymentError.message || 'Failed to create payment method';
-                // Don't fail billing creation if payment method fails
-                // Just log the error and continue
             }
         }
 

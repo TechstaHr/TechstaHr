@@ -23,5 +23,10 @@ const LedgerEntrySchema = new mongoose.Schema(
 LedgerEntrySchema.index({ user: 1, currency: 1, createdAt: -1 });
 LedgerEntrySchema.index({ account: 1, currency: 1 });
 LedgerEntrySchema.index({ reference: 1 });
+// Unique index to prevent duplicate ledger entries for the same external transaction
+LedgerEntrySchema.index(
+  { external_id: 1, account: 1, direction: 1 }, 
+  { unique: true, sparse: true, partialFilterExpression: { external_id: { $exists: true, $ne: null } } }
+);
 
 module.exports = mongoose.model('LedgerEntry', LedgerEntrySchema);

@@ -26,28 +26,57 @@ const creditAvailable = async ({
   metadata
 }) => {
   const wallet = await ensureWallet(userId, currency);
+  
+  // Check if this external_id was already processed to prevent duplicates
+  if (external_id) {
+    const existing = await LedgerEntry.findOne({
+      external_id,
+      account: 'user_available',
+      direction: 'credit'
+    });
+    
+    if (existing) {
+      console.log(`⚠️ Duplicate credit attempt detected for external_id: ${external_id}`);
+      const err = new Error('Transaction already processed');
+      err.code = 'DUPLICATE_TRANSACTION';
+      err.existing = existing;
+      throw err;
+    }
+  }
+  
   const entrySet = crypto.randomUUID();
   const newAvailable = (wallet.available_balance || 0) + amount;
 
   const base = { entry_set: entrySet, currency, type, reference, external_id, description, metadata };
 
-  await postEntries([
-    {
-      ...base,
-      user: userId,
-      wallet: wallet._id,
-      amount,
-      direction: 'credit',
-      account: 'user_available',
-      balance_available_after: newAvailable
-    },
-    {
-      ...base,
-      amount,
-      direction: 'debit',
-      account: 'processor_clearing'
+  try {
+    await postEntries([
+      {
+        ...base,
+        user: userId,
+        wallet: wallet._id,
+        amount,
+        direction: 'credit',
+        account: 'user_available',
+        balance_available_after: newAvailable
+      },
+      {
+        ...base,
+        amount,
+        direction: 'debit',
+        account: 'processor_clearing'
+      }
+    ]);
+  } catch (err) {
+    // Handle duplicate key error from unique index
+    if (err.code === 11000 && err.message.includes('external_id')) {
+      console.log(`⚠️ Duplicate ledger entry blocked by database for external_id: ${external_id}`);
+      const duplicateErr = new Error('Transaction already processed');
+      duplicateErr.code = 'DUPLICATE_TRANSACTION';
+      throw duplicateErr;
     }
-  ]);
+    throw err;
+  }
 
   wallet.available_balance = newAvailable;
   await wallet.save();
