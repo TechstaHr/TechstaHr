@@ -55,7 +55,7 @@ const triggerPayment = async (req, res) => {
       reference: existingPayroll.trxReference,
     };
     
-    // Check if the payer (logged-in user/admin/company) has sufficient funds
+    // Check if the payer has sufficient funds
     const payerId = req.user.id;
     const payerWallet = await ledger.ensureWallet(payerId, existingBank.currency);
     if ((payerWallet.available_balance || 0) < existingPayroll.paymentAmount) {
@@ -68,7 +68,7 @@ const triggerPayment = async (req, res) => {
 
     const response = await flutterwaveUtils.directTransfer(data);
 
-    // Debit the payer's wallet (not the employee's) after successful transfer initiation
+    // Debit the payer's wallet after successful transfer initiation
     try {
       await ledger.debitAvailable({
         userId: payerId,
@@ -84,7 +84,7 @@ const triggerPayment = async (req, res) => {
       });
     } catch (walletErr) {
       console.error('Failed to debit payer wallet after transfer initiation:', walletErr);
-      // Optionally, you might want to flag this payout for review/refund if debit fails
+      // ToDo: Flag this payout for review/refund if debit fails
     }
 
     existingPayroll.paymentStatus = "initiated";
@@ -311,8 +311,7 @@ const flutterwaveWebhook = async (req, res) => {
       return res.status(200).json({ message: 'Event status not processed', status: eventStatus });
     }
     if (eventType === 'CARD_TRANSACTION' || event.status === 'successful') {
-      // TODO: Add wallet funding logic here if needed
-      // For now, acknowledge receipt
+      // TODO: Add wallet funding logic here
       return res.status(200).json({ 
         message: 'Payment event acknowledged', 
         type: eventType,

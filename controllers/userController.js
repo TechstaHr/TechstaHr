@@ -61,7 +61,6 @@ const getUserDetails = async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
-        // Attach resolved bank info if present
         let bank = null;
         if (billing?.bankDetail?.bankId) {
             bank = billing.bankDetail.bankId;
@@ -201,10 +200,8 @@ const updateUserProfile = async (req, res) => {
         if (addressToSave) {
             try {
                 console.log('Attempting to save address to BillingInfo for userId:', userId);
-                console.log('Address to save:', addressToSave);
                 
                 const existingBilling = await BillingInfo.findOne({ userId });
-                console.log('Existing billing found:', existingBilling ? 'Yes' : 'No');
                 
                 if (existingBilling) {
                     existingBilling.address = addressToSave;
@@ -221,7 +218,6 @@ const updateUserProfile = async (req, res) => {
                     billingResult = { created: true, id: savedBilling._id };
                 }
             } catch (billingError) {
-                console.error("Error saving address to billing info:", billingError);
                 console.error("Error details:", {
                     name: billingError.name,
                     message: billingError.message,

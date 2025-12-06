@@ -92,6 +92,62 @@ async function uploadScreenshotToServer(screenshotFile, taskId) {
 ```
 
 
-### Run flutterwave webhook
-- Run the app (if it's not running already): `npm run start`
-- 
+## Run flutterwave webhook (Locally)
+
+### **1. Set up ngrok**
+
+* Create an account on **[ngrok](https://ngrok.com/)** and complete the setup/installation.
+* Once done, open your terminal and expose the port your app is running on:
+
+```
+ngrok http <port>
+```
+
+For example, if your app runs on port **3000**, use:
+
+```
+ngrok http 3000
+```
+
+* ngrok will generate a public URL such as:
+
+```
+https://26f4096670c0.ngrok-free.app
+```
+
+---
+
+### **2. Configure Flutterwave Webhook**
+
+* Go to your **Flutterwave dashboard** and set the webhook URL to:
+
+```
+https://<your-ngrok-url>/api/v1/payment/flutterwave-webhook
+```
+
+Example:
+
+```
+https://26f4096670c0.ngrok-free.app/api/v1/payment/flutterwave-webhook
+```
+
+> **Note:** The endpoint in the app is `api/v1/payment/flutterwave-webhook`, so the full URL must match it.
+
+* In the Flutterwave dashboard, create and save a **Webhook Secret** — you will need this in your app.
+
+---
+
+### **3. Configure Your Techsta App**
+
+* Open your `.env` file and set:
+
+```
+FLW_WEBHOOK_SECRET=<your-flutterwave-webhook-secret>
+```
+
+* Start (or restart) the app in another terminal:
+
+```
+npm run start
+```
+

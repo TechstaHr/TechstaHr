@@ -40,7 +40,6 @@ async function refreshToken() {
     accessToken = response.data.access_token;
     expiresIn = response.data.expires_in;
     lastTokenRefreshTime = Date.now();
-    // console.log('Access token refreshed:', accessToken);
   } catch (error) {
     console.error('Error refreshing token:', error.response ? error.response.data : error.message);
   }
@@ -52,14 +51,14 @@ async function ensureTokenIsValid() {
   const timeLeft = expiresIn - timeSinceLastRefresh;
 
   if (!accessToken || timeLeft < 60) { // refresh if less than 1 minute remains
-    console.log('Refreshing token...' );
+    console.log('Refreshing token...');
     await refreshToken();
   } else if (shouldLogTokenStatus) {
     console.log(`Token is still valid for ${Math.floor(timeLeft)} seconds.`);
   }
 }
 
-setInterval(ensureTokenIsValid, 500); // check roughly every 50 seconds
+setInterval(ensureTokenIsValid, 5000);
 
 
 const directTransfer = async (data) => {
@@ -96,7 +95,6 @@ const directTransfer = async (data) => {
         }
       }
     );
-    console.log('Transfer initiation response:', response.data);
     return {
       status: response.data.status,
       message: response.data.message,
@@ -131,14 +129,11 @@ const directTransfer = async (data) => {
 const createCustomer = async (data) => {
   try {
     await ensureTokenIsValid();
-
-    // Build payload with only provided fields
     const payload = {
       email: data.email,
       address: data.address
     };
 
-    // Only add optional fields if they are provided
     if (data.name) payload.name = data.name;
     if (data.phone) payload.phone = data.phone;
     
@@ -154,7 +149,6 @@ const createCustomer = async (data) => {
         }
       }
     );
-    console.log('The response:', response.data);
     return {
       status: response.data.status,
       message: response.data.message,
@@ -221,8 +215,6 @@ const updateCustomer = async (customerId, data) => {
         }
       }
     );
-
-    console.log('Customer update response:', response.data);
 
     return {
       status: response.data.status,
@@ -325,7 +317,6 @@ const addPaymentMethod = async (data) => {
       customer_id
     };
 
-    // Add card details for card type
     if (type === 'card') {
       if (!card || !card.nonce || !card.encrypted_card_number || !card.encrypted_expiry_month || 
           !card.encrypted_expiry_year || !card.encrypted_cvv) {
@@ -334,7 +325,6 @@ const addPaymentMethod = async (data) => {
       payload.card = card;
     }
 
-    // Add bank account details for bank_account type
     if (type === 'bank_account') {
       if (!bank_account || !bank_account.name || !bank_account.number || !bank_account.bank_code) {
         throw new Error('addPaymentMethod: Bank account requires name, number, and bank_code');
@@ -524,12 +514,10 @@ const updateCharge = async (chargeId, data) => {
 
     const payload = {};
 
-    // Preferred new structure
     if (data.authorization) {
       payload.authorization = data.authorization;
     }
 
-    // Backwards compatibility for legacy fields
     if (data.pin && !payload.authorization) payload.pin = data.pin;
     if (data.otp && !payload.authorization) payload.otp = data.otp;
     if (data.additional_fields && !payload.authorization) payload.additional_fields = data.additional_fields;
