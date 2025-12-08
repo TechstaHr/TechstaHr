@@ -504,6 +504,8 @@ const updateProjectProgress = async (req, res) => {
     const updateFields = { progress };
     if (progress === 100) {
       updateFields.status = "completed";
+    } else if (progress > 0) {
+      updateFields.status = "started";
     }
 
     const project = await Project.findOneAndUpdate(
@@ -538,7 +540,7 @@ const updateProjectStatus = async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
-  const allowedStatuses = ["pending", "active", "completed"];
+  const allowedStatuses = ["pending", "active", "started", "completed"];
   if (!allowedStatuses.includes(status)) {
     return res.status(400).json({ message: "Invalid status value." });
   }

@@ -34,7 +34,7 @@ const ProjectSchema = new mongoose.Schema({
     }
   ],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  status: { type: String, enum: ['pending', 'active', 'completed'], default: 'pending' },
+  status: { type: String, enum: ['pending', 'active', 'started', 'completed'], default: 'pending' },
   issues: [IssueSchema],
   comments: [CommentSchema],
   progress: { type: Number, default: 0 },
