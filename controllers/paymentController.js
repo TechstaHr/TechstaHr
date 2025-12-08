@@ -18,7 +18,6 @@ const triggerPayment = async (req, res) => {
       return res.status(404).json({ message: "Payroll entry not found." });
     }
 
-    // Prevent triggering payment that's already been initiated, completed, or failed
     if (existingPayroll.paymentStatus !== 'scheduled') {
       return res.status(400).json({ 
         message: `Payment cannot be triggered. Current status: ${existingPayroll.paymentStatus}`,
@@ -42,6 +41,7 @@ const triggerPayment = async (req, res) => {
     if (!existingBillingInfo) {
       return res.status(404).json({ message: "No billing info found for user." });
     }
+
     const data = {
       currency: existingBank.currency,
       paymentAmount: existingPayroll.paymentAmount,

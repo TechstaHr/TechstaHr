@@ -47,7 +47,7 @@ async function refreshToken() {
 
 async function ensureTokenIsValid() {
   const currentTime = Date.now();
-  const timeSinceLastRefresh = (currentTime - lastTokenRefreshTime) / 1000; // convert to seconds
+  const timeSinceLastRefresh = (currentTime - lastTokenRefreshTime) / 1000;
   const timeLeft = expiresIn - timeSinceLastRefresh;
 
   if (!accessToken || timeLeft < 60) { // refresh if less than 1 minute remains
@@ -83,6 +83,7 @@ const directTransfer = async (data) => {
       reference: data.reference,
     }
 
+    console.log('Initiating direct transfer with payload:', JSON.stringify(payload, null, 2));
     const response = await axios.post(
       `${FLW_BASE_URL}/direct-transfers`,
       payload,
@@ -95,6 +96,7 @@ const directTransfer = async (data) => {
         }
       }
     );
+
     return {
       status: response.data.status,
       message: response.data.message,
@@ -443,17 +445,17 @@ const initiateCharge = async (data) => {
     // Handle authorization - auto-generate OTP code if type is otp and code not provided
     if (authorization) {
       const auth = { ...authorization };
-      if (auth.type === 'otp' && auth.otp && !auth.otp.code) {
-        // Generate 4-8 digit OTP code
-        const codeLength = Math.floor(Math.random() * 5) + 4; // Random between 4 and 8
-        auth.otp.code = crypto.randomInt(10 ** (codeLength - 1), 10 ** codeLength).toString();
-        console.log('Auto-generated OTP code (length:', codeLength, ', code:', auth.otp.code, ')');
-        
-        // Send OTP code via email to the user
+      if (auth.type === 'otp' && auth.otp) {
+        // Auto-generate OTP code if not provided
+        if (!auth.otp.code) {
+          const codeLength = Math.floor(Math.random() * 5) + 4; // Random between 4 and 8
+          auth.otp.code = crypto.randomInt(10 ** (codeLength - 1), 10 ** codeLength).toString();
+          console.log('Auto-generated OTP code (length:', codeLength, ', code:', auth.otp.code, ')');
+        }
         try {
           const otpEmailHtml = renderToStaticMarkup(
             React.createElement(OtpEmail, {
-              full_name: user.fullName || user.email.split('@')[0],
+              full_name: user.full_name.split(' ')[0] || user.email.split('@')[0],
               otp: auth.otp.code
             })
           );
