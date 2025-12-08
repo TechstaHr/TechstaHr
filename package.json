@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node server.js",
     "db:populate-banks": "node scripts/populateBanks.js",
-    "db:migrate": "node scripts/fix-payroll-indexes.js && node scripts/fix-billing-index.js"
+    "db:fix-indexes": "node scripts/fix-payroll-indexes.js && node scripts/fix-billing-index.js"
   },
   "keywords": [],
   "author": "",
