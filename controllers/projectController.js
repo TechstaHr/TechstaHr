@@ -516,9 +516,12 @@ const updateProjectProgress = async (req, res) => {
     }
 
     const updateFields = { progress };
+    updateFields.status = "active";
     if (progress === 100) {
       updateFields.status = "completed";
     }
+
+    
 
     const project = await Project.findOneAndUpdate(
       { _id: id, team: req.user.team },
