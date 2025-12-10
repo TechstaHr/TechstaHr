@@ -1,7 +1,12 @@
 const TimeEntry = require('../models/TimeEntry');
 const User = require('../models/User');
+const BillingInfo = require('../models/BillingInfo');
+const Wallet = require('../models/Wallet');
+const Bank = require('../models/Bank');
 const moment = require('moment-timezone');
 const getAllTimezones = require('../utils/timezones');
+const { searchCustomer, createCustomer } = require('../utils/flutterwave');
+const crypto = require('crypto');
 
 const getAllUser = async (req, res) => {
     try {
@@ -46,13 +51,29 @@ const getUserDetails = async (req, res) => {
     try {
         const { userId } = req.params;
 
-        const user = await User.findById(userId)
+        const [user, billing, wallets] = await Promise.all([
+            User.findById(userId).select('-password -otp -otpExpiresAt'),
+            BillingInfo.findOne({ userId }).populate('bankDetail.bankId'),
+            Wallet.find({ user: userId }).sort({ currency: 1 })
+        ]);
 
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
 
-        res.status(200).json(user);
+        let bank = null;
+        if (billing?.bankDetail?.bankId) {
+            bank = billing.bankDetail.bankId;
+        } else if (billing?.bankDetail?.bankId) {
+            bank = await Bank.findById(billing.bankDetail.bankId);
+        }
+
+        res.status(200).json({
+            user,
+            billing,
+            bank,
+            wallets
+        });
     } catch (error) {
         console.error("Error fetching user profile:", error);
         res.status(500).json({ message: "Internal server error" });
@@ -77,13 +98,142 @@ const updateUserProfile = async (req, res) => {
             fieldsToUpdate.avatar = req.file.path;
         }
 
+        // Validate address if provided
+        let addressToSave = null;
+        if (updates.address) {
+            const requiredAddressFields = ['street', 'city', 'state', 'postal_code', 'country'];
+            const missingFields = requiredAddressFields.filter(field => !updates.address[field]);
+            if (missingFields.length > 0) {
+                return res.status(400).json({ 
+                    message: `Address is incomplete. Missing fields: ${missingFields.join(', ')}` 
+                });
+            }
+            addressToSave = updates.address;
+        }
+
+        // Get current user data before update
+        const currentUser = await User.findById(userId);
+        if (!currentUser) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        // Check if user exists in Flutterwave and create if not
+        if (!currentUser.flw_customer_id) {
+            try {
+                // Search for customer in Flutterwave
+                const searchResult = await searchCustomer({
+                    email: currentUser.email,
+                    page: 1,
+                    size: 10,
+                    traceId: crypto.randomBytes(16).toString('hex')
+                });
+
+                console.log('Flutterwave customer search result:', searchResult);
+
+                let flwCustomerId = null;
+
+                // Check if customer exists in search results
+                if (searchResult.status === 'success' && 
+                    searchResult.data && 
+                    Array.isArray(searchResult.data) && 
+                    searchResult.data.length > 0) {
+                    // Customer exists, get the ID
+                    flwCustomerId = searchResult.data[0].id;
+                    console.log(`Flutterwave customer found: ${flwCustomerId}`);
+                } else {
+                    // Customer doesn't exist, create new one
+                    // Use provided address or fall back to billing info
+                    let addressData = addressToSave;
+                    
+                    if (!addressData) {
+                        // Try to get address from existing billing info
+                        const billingInfo = await BillingInfo.findOne({ userId });
+                        if (billingInfo && billingInfo.address) {
+                            addressData = billingInfo.address;
+                        }
+                    }
+
+                    const flwData = {
+                        email: currentUser.email,
+                        address: addressData ? {
+                            city: addressData.city || "",
+                            country: addressData.country || "NG",
+                            line1: addressData.street || "",
+                            postal_code: addressData.postal_code || "",
+                            state: addressData.state || ""
+                        } : {
+                            city: "",
+                            country: "NG",
+                            line1: "",
+                            postal_code: "",
+                            state: ""
+                        },
+                        traceId: crypto.randomBytes(16).toString('hex')
+                    };
+
+                    const createResult = await createCustomer(flwData);
+                    
+                    if (createResult.status === 'success' && createResult.data?.id) {
+                        flwCustomerId = createResult.data.id;
+                        console.log(`Flutterwave customer created: ${flwCustomerId}`);
+                    }
+                }
+
+                // Update flw_customer_id if we got one
+                if (flwCustomerId) {
+                    fieldsToUpdate.flw_customer_id = flwCustomerId;
+                }
+            } catch (flwError) {
+                console.error('Flutterwave customer check/creation error:', flwError);
+                // Don't fail the profile update if Flutterwave fails
+            }
+        }
+
         const updatedUser = await User.findByIdAndUpdate(
             userId,
             { $set: fieldsToUpdate },
             { new: true, runValidators: true }
         ).select('-password -otp -otpExpiresAt');
 
-        res.status(200).json(updatedUser);
+        // Save or update address in BillingInfo if provided
+        let billingResult = null;
+        if (addressToSave) {
+            try {
+                console.log('Attempting to save address to BillingInfo for userId:', userId);
+                
+                const existingBilling = await BillingInfo.findOne({ userId });
+                
+                if (existingBilling) {
+                    existingBilling.address = addressToSave;
+                    const savedBilling = await existingBilling.save();
+                    console.log('Updated address in existing billing info:', savedBilling._id);
+                    billingResult = { created: false, id: savedBilling._id };
+                } else {
+                    const billingInfo = new BillingInfo({
+                        userId,
+                        address: addressToSave
+                    });
+                    const savedBilling = await billingInfo.save();
+                    console.log('Created new billing info with address:', savedBilling._id);
+                    billingResult = { created: true, id: savedBilling._id };
+                }
+            } catch (billingError) {
+                console.error("Error details:", {
+                    name: billingError.name,
+                    message: billingError.message,
+                    errors: billingError.errors
+                });
+                billingResult = { error: billingError.message };
+                // Continue even if billing info save fails
+            }
+        }
+
+        res.status(200).json({
+            message: "Profile updated successfully",
+            user: updatedUser,
+            addressSaved: addressToSave ? true : false,
+            billingInfo: billingResult
+        });
     } catch (error) {
         console.error("Error updating user profile:", error);
         res.status(500).json({ message: "Internal server error" });
