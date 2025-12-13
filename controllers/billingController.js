@@ -7,8 +7,14 @@ const Payroll = require('../models/Payroll');
 const PaymentMethod = require('../models/PaymentMethod');
 const Charge = require('../models/Charge');
 const User = require('../models/User');
+const TimeEntry = require('../models/TimeEntry');
+const EmployeeRate = require('../models/EmployeeRate');
+const Deduction = require('../models/Deduction');
 const ledger = require('../utils/ledger');
 const { addPaymentMethod, initiateCharge, updateCharge: updateFlwCharge } = require('../utils/flutterwave');
+
+// Helper function to round currency amounts to 2 decimal places
+const roundCurrency = (amount) => Math.round(amount * 100) / 100;
 
 const addBank = async (req, res) => {
   try {
@@ -73,15 +79,224 @@ const getBanks = async (req, res) => {
 
 const createPayroll = async (req, res) => {
   try {
+    const employerId = req.user.id;
+    const { 
+      userId, 
+      bankId, 
+      payPeriodStart, 
+      payPeriodEnd, 
+      paymentDue, 
+      paymentGateway,
+      narration 
+    } = req.body;
+
+    // Validate required fields
+    if (!userId || !bankId || !payPeriodStart || !payPeriodEnd) {
+      return res.status(400).json({ 
+        message: 'Missing required fields: userId, bankId, payPeriodStart, payPeriodEnd' 
+      });
+    }
+
+    // Verify employee exists
+    const employee = await User.findById(userId);
+    if (!employee) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    // Verify bank exists
+    const bank = await Bank.findById(bankId);
+    if (!bank) {
+      return res.status(404).json({ message: 'Bank not found' });
+    }
+
+    // 1. Fetch all approved time entries for the pay period
+    const periodStart = new Date(payPeriodStart);
+    const periodEnd = new Date(payPeriodEnd);
+    periodEnd.setHours(23, 59, 59, 999);
+
+    const timeEntries = await TimeEntry.find({
+      user: userId,
+      status: 'approved',
+      date: { $gte: periodStart, $lte: periodEnd }
+    });
+
+    if (timeEntries.length === 0) {
+      return res.status(400).json({ 
+        message: 'No approved time entries found for this period',
+        period: { start: payPeriodStart, end: payPeriodEnd }
+      });
+    }
+
+    // 2. Calculate total hours
+    const totalHours = timeEntries.reduce((sum, entry) => sum + (entry.totalHours || 0), 0);
+
+    if (totalHours === 0) {
+      return res.status(400).json({ 
+        message: 'No billable hours found in approved time entries' 
+      });
+    }
+
+    // 3. Get active employee rate
+    const activeRate = await EmployeeRate.findOne({
+      userId,
+      employerId,
+      status: 'active',
+      effectiveFrom: { $lte: periodEnd }
+    }).sort({ effectiveFrom: -1 });
+
+    if (!activeRate) {
+      return res.status(404).json({ 
+        message: 'No active rate found for this employee. Please set an hourly rate first.' 
+      });
+    }
+
+    // 4. Calculate gross amount (rounded to 2 decimals)
+    const grossAmount = roundCurrency(totalHours * activeRate.hourlyRate);
+
+    // 5. Get active deductions and sort by priority
+    const activeDeductions = await Deduction.find({
+      userId,
+      employerId,
+      status: 'active',
+      effectiveFrom: { $lte: periodEnd },
+      $or: [
+        { effectiveTo: { $exists: false } },
+        { effectiveTo: { $gte: periodStart } }
+      ]
+    }).sort({ priority: 1 });
+
+    // 6. Apply deductions in order
+    let runningAmount = grossAmount;
+    const deductionBreakdown = [];
+    let totalDeductions = 0;
+
+    // Separate pre-tax and post-tax deductions
+    const preTaxDeductions = activeDeductions.filter(d => d.isPreTax);
+    const postTaxDeductions = activeDeductions.filter(d => !d.isPreTax);
+
+    // Apply pre-tax deductions first
+    for (const deduction of preTaxDeductions) {
+      const deductionAmount = roundCurrency(deduction.calculateAmount(runningAmount));
+      
+      deductionBreakdown.push({
+        deductionId: deduction._id,
+        name: deduction.name,
+        type: deduction.deductionType,
+        calculationType: deduction.calculationType,
+        value: deduction.value,
+        amount: deductionAmount,
+        isPreTax: true
+      });
+
+      runningAmount -= deductionAmount;
+      totalDeductions += deductionAmount;
+
+      // Update totalDeducted for non-recurring deductions
+      if (!deduction.isRecurring) {
+        deduction.totalDeducted += deductionAmount;
+        
+        // Mark as completed if target reached
+        if (deduction.targetAmount && deduction.totalDeducted >= deduction.targetAmount) {
+          deduction.status = 'completed';
+          deduction.effectiveTo = new Date();
+        }
+        
+        await deduction.save();
+      }
+    }
+
+    // Apply post-tax deductions
+    for (const deduction of postTaxDeductions) {
+      const deductionAmount = roundCurrency(deduction.calculateAmount(runningAmount));
+      
+      deductionBreakdown.push({
+        deductionId: deduction._id,
+        name: deduction.name,
+        type: deduction.deductionType,
+        calculationType: deduction.calculationType,
+        value: deduction.value,
+        amount: deductionAmount,
+        isPreTax: false
+      });
+
+      runningAmount -= deductionAmount;
+      totalDeductions += deductionAmount;
+
+      // Update totalDeducted for non-recurring deductions
+      if (!deduction.isRecurring) {
+        deduction.totalDeducted += deductionAmount;
+        
+        // Mark as completed if target reached
+        if (deduction.targetAmount && deduction.totalDeducted >= deduction.targetAmount) {
+          deduction.status = 'completed';
+          deduction.effectiveTo = new Date();
+        }
+        
+        await deduction.save();
+      }
+    }
+
+    // 7. Calculate net amount (final payment amount) - round to 2 decimals
+    const netAmount = roundCurrency(Math.max(0, runningAmount));
+    const finalTotalDeductions = roundCurrency(totalDeductions);
+
+    // 8. Create payroll record with full breakdown
     const newPayroll = new Payroll({
+      userId,
+      bankId,
+      narration: narration || `Payroll for ${payPeriodStart} to ${payPeriodEnd}`,
+      
+      // Payment details
+      paymentAmount: netAmount,
+      paymentDue: paymentDue || new Date(),
+      paymentStatus: 'scheduled',
+      paymentGateway: paymentGateway || 'flutterwave',
+      
+      // Calculation breakdown
+      grossAmount,
+      totalHours,
+      hourlyRate: activeRate.hourlyRate,
+      currency: activeRate.currency || bank.currency || 'NGN',
+      deductions: deductionBreakdown,
+      totalDeductions: finalTotalDeductions,
+      
+      // Pay period
+      payPeriodStart: periodStart,
+      payPeriodEnd: periodEnd,
+      
+      // Reference time entries
+      timeEntries: timeEntries.map(entry => entry._id),
+      
+      // Transaction identifiers
       traceId: new mongoose.Types.ObjectId(),
       idempotencyKey: new mongoose.Types.ObjectId(),
       trxReference: new mongoose.Types.ObjectId(),
-      ...req.body
     });
+
     await newPayroll.save();
-    res.status(200).json(newPayroll);
+
+    // Populate for response
+    await newPayroll.populate([
+      { path: 'userId', select: 'full_name email' },
+      { path: 'bankId', select: 'bankName code currency' },
+      { path: 'timeEntries', select: 'date totalHours status' }
+    ]);
+
+    res.status(201).json({
+      message: 'Payroll created successfully',
+      payroll: newPayroll,
+      summary: {
+        totalHours,
+        hourlyRate: activeRate.hourlyRate,
+        grossAmount,
+        totalDeductions: finalTotalDeductions,
+        netAmount,
+        deductionsApplied: deductionBreakdown.length
+      }
+    });
+
   } catch (err) {
+    console.error('Error creating payroll:', err);
     res.status(500).json({ message: err.message });
   }
 };

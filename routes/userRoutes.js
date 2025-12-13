@@ -10,7 +10,6 @@ router.get('/users/:userId', authenticateToken, authorizeAdmin, userCtrl.getUser
 router.get('/profile', authenticateToken, userCtrl.getUserProfile);
 router.get('/zones', authenticateToken, userCtrl.listTimezones);
 
-
 router.put('/profile', authenticateToken, upload.single('avatar'), userCtrl.updateUserProfile);
 router.post('/upload-profile-picture', authenticateToken, upload.single('avatar'), userCtrl.uploadProfilePicture);
 router.put('/update-region', authenticateToken, userCtrl.updateRegion);

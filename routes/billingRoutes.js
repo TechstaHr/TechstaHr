@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const billingCtrl = require('../controllers/billingController');
+const employmentCtrl = require('../controllers/employmentController');
 const { authenticateToken, authorizeAdmin } = require('../middlewares/authMiddleware');
 const Bank = require('../models/Bank');
 
@@ -24,18 +25,18 @@ router.post('/payroll', authenticateToken, authorizeAdmin, billingCtrl.createPay
 router.get('/payroll/:id', authenticateToken, authorizeAdmin, billingCtrl.getPayroll);
 router.get('/payrolls', authenticateToken, billingCtrl.getAllPayroll);
 router.post('/payroll/update/:id', authenticateToken, authorizeAdmin, billingCtrl.updatePayroll);
-router.post('/banks/add', authenticateToken, authorizeAdmin, async (req, res) => {
-  try {
-    const { bankName, code, country = 'Nigeria', currency = 'NGN' } = req.body;
-    if (!bankName || !code) return res.status(400).json({ message: 'bankName and code required' });
+// router.post('/banks/add', authenticateToken, authorizeAdmin, async (req, res) => {
+//   try {
+//     const { bankName, code, country = 'Nigeria', currency = 'NGN' } = req.body;
+//     if (!bankName || !code) return res.status(400).json({ message: 'bankName and code required' });
 
-    const bank = await Bank.create({ bankName, code: String(code).trim(), country, currency });
-    res.status(201).json({ message: 'Bank added', bank });
-  } catch (err) {
-    console.error('Error adding bank:', err);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
+//     const bank = await Bank.create({ bankName, code: String(code).trim(), country, currency });
+//     res.status(201).json({ message: 'Bank added', bank });
+//   } catch (err) {
+//     console.error('Error adding bank:', err);
+//     res.status(500).json({ message: 'Internal server error' });
+//   }
+// });
 // Payment Methods Management
 router.post('/payment-methods', authenticateToken, billingCtrl.createPaymentMethod);
 router.get('/payment-methods', authenticateToken, billingCtrl.getPaymentMethods);
@@ -43,5 +44,20 @@ router.patch('/payment-methods/:paymentMethodId/default', authenticateToken, bil
 router.delete('/payment-methods/:paymentMethodId', authenticateToken, billingCtrl.deletePaymentMethod);
 // Charges Management
 router.post('/charges', authenticateToken, authorizeAdmin, billingCtrl.createCharge);
+
+
+// ============ EMPLOYEE RATE ROUTES ============
+router.post('/rate', authenticateToken, authorizeAdmin, employmentCtrl.setEmployeeRate);
+router.get('/rate/:userId', authenticateToken, authorizeAdmin, employmentCtrl.getEmployeeRate);
+router.put('/rate/:rateId', authenticateToken, authorizeAdmin, employmentCtrl.updateEmployeeRate);
+router.get('/rates', authenticateToken, authorizeAdmin, employmentCtrl.getAllEmployeeRates);
+
+// ============ DEDUCTION ROUTES ============
+router.post('/deduction', authenticateToken,authorizeAdmin, employmentCtrl.createDeduction);
+router.get('/deductions', authenticateToken, authorizeAdmin, employmentCtrl.getAllDeductions);
+router.get('/deduction/:userId', authenticateToken, authorizeAdmin, employmentCtrl.getEmployeeDeductions);
+router.put('/deduction/:deductionId', authenticateToken, authorizeAdmin, employmentCtrl.updateDeduction);
+router.delete('/deduction/:deductionId', authenticateToken, authorizeAdmin, employmentCtrl.deleteDeduction);
+
 
 module.exports = router;

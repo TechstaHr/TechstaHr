@@ -26,10 +26,6 @@ const billingInfoSchema = new mongoose.Schema({
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Bank'
         },
-    },
-    payRate: {
-        type: String,
-        enum: ['hourly', 'weekly', 'monthly']
     }
 }, { timestamps: true });
 
