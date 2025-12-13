@@ -1,5 +1,19 @@
 const mongoose = require('mongoose');
 
+// Define deduction breakdown subdocument schema explicitly
+const DeductionBreakdownSchema = new mongoose.Schema({
+  deductionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Deduction'
+  },
+  name: String,
+  type: String,
+  calculationType: String,
+  value: Number,
+  amount: Number,
+  isPreTax: Boolean
+}, { _id: false }); // Don't create _id for subdocuments
+
 const PayrollSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -14,7 +28,51 @@ const PayrollSchema = new mongoose.Schema({
     index: true
   },
   narration: { type: String, required: false },
-  paymentAmount: { type: Number, required: true },
+  paymentAmount: { 
+    type: Number, 
+    required: true,
+    comment: 'Net amount to be paid after deductions'
+  },
+  
+  // Payroll calculation breakdown
+  grossAmount: {
+    type: Number,
+    comment: 'Total amount before deductions (hours × rate)'
+  },
+  totalHours: {
+    type: Number,
+    comment: 'Total approved hours for this payroll period'
+  },
+  hourlyRate: {
+    type: Number,
+    comment: 'Hourly rate used for calculation (snapshot)'
+  },
+  currency: {
+    type: String,
+    default: 'NGN'
+  },
+  deductions: [DeductionBreakdownSchema],
+  totalDeductions: {
+    type: Number,
+    default: 0
+  },
+  
+  // Pay period information
+  payPeriodStart: {
+    type: Date,
+    comment: 'Start date of pay period'
+  },
+  payPeriodEnd: {
+    type: Date,
+    comment: 'End date of pay period'
+  },
+  
+  // Time entries included in this payroll
+  timeEntries: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TimeEntry'
+  }],
+  
   paymentDue: { type: Date, required: false },
   paymentStatus: {
     type: String,

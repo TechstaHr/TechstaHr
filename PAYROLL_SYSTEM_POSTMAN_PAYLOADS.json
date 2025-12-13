@@ -1,0 +1,703 @@
+{
+  "EMPLOYMENT_MANAGEMENT": {
+    "1_SET_EMPLOYEE_RATE": {
+      "endpoint": "POST /api/v1/employment/rate",
+      "description": "Set hourly rate for an employee",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}",
+        "Content-Type": "application/json"
+      },
+      "payload": {
+        "userId": "693396ffc75f48bd67e6c1d5",
+        "hourlyRate": 2500,
+        "currency": "NGN",
+        "rateType": "hourly",
+        "notes": "Initial rate for new employee"
+      },
+      "variations": {
+        "higher_rate": {
+          "userId": "693396ffc75f48bd67e6c1d5",
+          "hourlyRate": 5000,
+          "currency": "NGN",
+          "rateType": "hourly",
+          "notes": "Senior developer rate"
+        },
+        "project_specific_rate": {
+          "userId": "693396ffc75f48bd67e6c1d5",
+          "hourlyRate": 3500,
+          "currency": "NGN",
+          "rateType": "hourly",
+          "projectId": "68d31429ebb9738877aa0070",
+          "notes": "Higher rate for special project"
+        },
+        "daily_rate": {
+          "userId": "693396ffc75f48bd67e6c1d5",
+          "hourlyRate": 20000,
+          "currency": "NGN",
+          "rateType": "daily",
+          "notes": "Consultant daily rate"
+        }
+      }
+    },
+    "2_GET_EMPLOYEE_RATE": {
+      "endpoint": "GET /api/v1/employment/rate/:userId",
+      "description": "Get rate for a specific employee",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}"
+      },
+      "examples": {
+        "current_rate_only": "GET /api/v1/employment/rate/693396ffc75f48bd67e6c1d5",
+        "with_history": "GET /api/v1/employment/rate/693396ffc75f48bd67e6c1d5?includeHistory=true",
+        "for_specific_project": "GET /api/v1/employment/rate/693396ffc75f48bd67e6c1d5?projectId=68d31429ebb9738877aa0070"
+      }
+    },
+    "3_GET_ALL_RATES": {
+      "endpoint": "GET /api/v1/employment/rates",
+      "description": "Get all employee rates for the employer",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}"
+      },
+      "examples": {
+        "active_only": "GET /api/v1/employment/rates",
+        "with_status_filter": "GET /api/v1/employment/rates?status=active",
+        "include_inactive": "GET /api/v1/employment/rates?status=inactive"
+      }
+    },
+    "4_UPDATE_EMPLOYEE_RATE": {
+      "endpoint": "PUT /api/v1/employment/rate/:rateId",
+      "description": "Update employee rate (creates new rate, marks old as inactive)",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}",
+        "Content-Type": "application/json"
+      },
+      "payload": {
+        "hourlyRate": 3000,
+        "notes": "Annual salary increase"
+      },
+      "variations": {
+        "major_increase": {
+          "hourlyRate": 6000,
+          "notes": "Promotion to senior level",
+          "effectiveFrom": "2025-12-15"
+        },
+        "future_dated": {
+          "hourlyRate": 3500,
+          "notes": "Q1 2026 rate adjustment",
+          "effectiveFrom": "2026-01-01"
+        }
+      }
+    },
+    "5_CREATE_DEDUCTION_TAX": {
+      "endpoint": "POST /api/v1/employment/deduction",
+      "description": "Create a percentage-based tax deduction",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}",
+        "Content-Type": "application/json"
+      },
+      "payload": {
+        "userId": "693396ffc75f48bd67e6c1d5",
+        "name": "Income Tax",
+        "deductionType": "tax",
+        "calculationType": "percentage",
+        "value": 10,
+        "priority": 1,
+        "isPreTax": false,
+        "isRecurring": true,
+        "description": "Standard 10% income tax deduction"
+      },
+      "variations": {
+        "paye_tax": {
+          "userId": "693396ffc75f48bd67e6c1d5",
+          "name": "PAYE Tax",
+          "deductionType": "tax",
+          "calculationType": "percentage",
+          "value": 7.5,
+          "priority": 1,
+          "isPreTax": false,
+          "isRecurring": true,
+          "description": "Pay As You Earn tax"
+        },
+        "progressive_tax": {
+          "userId": "693396ffc75f48bd67e6c1d5",
+          "name": "Higher Rate Tax",
+          "deductionType": "tax",
+          "calculationType": "percentage",
+          "value": 15,
+          "priority": 1,
+          "isPreTax": false,
+          "isRecurring": true,
+          "maxAmount": 50000,
+          "description": "15% tax with 50k monthly cap"
+        }
+      }
+    },
+    "6_CREATE_DEDUCTION_INSURANCE": {
+      "endpoint": "POST /api/v1/employment/deduction",
+      "description": "Create a fixed-amount insurance deduction",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}",
+        "Content-Type": "application/json"
+      },
+      "payload": {
+        "userId": "693396ffc75f48bd67e6c1d5",
+        "name": "Health Insurance",
+        "deductionType": "health_insurance",
+        "calculationType": "fixed_amount",
+        "value": 5000,
+        "priority": 2,
+        "isPreTax": false,
+        "isRecurring": true,
+        "description": "Monthly health insurance premium"
+      },
+      "variations": {
+        "family_plan": {
+          "userId": "693396ffc75f48bd67e6c1d5",
+          "name": "Family Health Plan",
+          "deductionType": "health_insurance",
+          "calculationType": "fixed_amount",
+          "value": 12000,
+          "priority": 2,
+          "isRecurring": true,
+          "description": "Premium family health coverage"
+        }
+      }
+    },
+    "7_CREATE_DEDUCTION_PENSION": {
+      "endpoint": "POST /api/v1/employment/deduction",
+      "description": "Create a pre-tax pension deduction",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}",
+        "Content-Type": "application/json"
+      },
+      "payload": {
+        "userId": "693396ffc75f48bd67e6c1d5",
+        "name": "Pension Contribution",
+        "deductionType": "pension",
+        "calculationType": "percentage",
+        "value": 8,
+        "priority": 0,
+        "isPreTax": true,
+        "isRecurring": true,
+        "description": "8% pension contribution (pre-tax)"
+      }
+    },
+    "8_CREATE_DEDUCTION_LOAN": {
+      "endpoint": "POST /api/v1/employment/deduction",
+      "description": "Create a loan repayment deduction (non-recurring with target)",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}",
+        "Content-Type": "application/json"
+      },
+      "payload": {
+        "userId": "693396ffc75f48bd67e6c1d5",
+        "name": "Salary Advance Repayment",
+        "deductionType": "loan_repayment",
+        "calculationType": "fixed_amount",
+        "value": 10000,
+        "priority": 5,
+        "isPreTax": false,
+        "isRecurring": false,
+        "targetAmount": 50000,
+        "description": "Repaying 50,000 salary advance in 5 monthly installments"
+      },
+      "variations": {
+        "percentage_loan": {
+          "userId": "693396ffc75f48bd67e6c1d5",
+          "name": "Equipment Loan",
+          "deductionType": "loan_repayment",
+          "calculationType": "percentage",
+          "value": 20,
+          "priority": 5,
+          "isRecurring": false,
+          "targetAmount": 100000,
+          "description": "20% of salary until 100k loan repaid"
+        },
+        "capped_loan": {
+          "userId": "693396ffc75f48bd67e6c1d5",
+          "name": "Emergency Loan",
+          "deductionType": "loan_repayment",
+          "calculationType": "fixed_amount",
+          "value": 15000,
+          "priority": 5,
+          "isRecurring": false,
+          "targetAmount": 75000,
+          "maxAmount": 15000,
+          "description": "15k monthly until 75k emergency loan repaid"
+        }
+      }
+    },
+    "9_CREATE_DEDUCTION_ADVANCE": {
+      "endpoint": "POST /api/v1/employment/deduction",
+      "description": "Create a salary advance deduction",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}",
+        "Content-Type": "application/json"
+      },
+      "payload": {
+        "userId": "693396ffc75f48bd67e6c1d5",
+        "name": "December Advance Deduction",
+        "deductionType": "advance_deduction",
+        "calculationType": "fixed_amount",
+        "value": 25000,
+        "priority": 6,
+        "isRecurring": false,
+        "targetAmount": 25000,
+        "description": "One-time deduction for December advance"
+      }
+    },
+    "10_CREATE_DEDUCTION_CUSTOM": {
+      "endpoint": "POST /api/v1/employment/deduction",
+      "description": "Create a custom deduction",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}",
+        "Content-Type": "application/json"
+      },
+      "payload": {
+        "userId": "693396ffc75f48bd67e6c1d5",
+        "name": "Union Dues",
+        "deductionType": "custom",
+        "calculationType": "fixed_amount",
+        "value": 2500,
+        "priority": 10,
+        "isRecurring": true,
+        "description": "Monthly union membership dues"
+      },
+      "variations": {
+        "gym_membership": {
+          "userId": "693396ffc75f48bd67e6c1d5",
+          "name": "Gym Membership",
+          "deductionType": "custom",
+          "calculationType": "fixed_amount",
+          "value": 3000,
+          "priority": 10,
+          "isRecurring": true,
+          "description": "Company gym membership fee"
+        },
+        "meal_plan": {
+          "userId": "693396ffc75f48bd67e6c1d5",
+          "name": "Meal Plan Deduction",
+          "deductionType": "custom",
+          "calculationType": "fixed_amount",
+          "value": 8000,
+          "priority": 9,
+          "isRecurring": true,
+          "description": "Monthly meal plan subscription"
+        }
+      }
+    },
+    "11_GET_EMPLOYEE_DEDUCTIONS": {
+      "endpoint": "GET /api/v1/employment/deduction/:userId",
+      "description": "Get all deductions for a specific employee",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}"
+      },
+      "examples": {
+        "active_only": "GET /api/v1/employment/deduction/693396ffc75f48bd67e6c1d5",
+        "with_status_filter": "GET /api/v1/employment/deduction/693396ffc75f48bd67e6c1d5?status=active",
+        "include_inactive": "GET /api/v1/employment/deduction/693396ffc75f48bd67e6c1d5?includeInactive=true"
+      }
+    },
+    "12_GET_ALL_DEDUCTIONS": {
+      "endpoint": "GET /api/v1/employment/deductions",
+      "description": "Get all deductions for the employer",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}"
+      },
+      "examples": {
+        "active_only": "GET /api/v1/employment/deductions",
+        "all_statuses": "GET /api/v1/employment/deductions?status=active",
+        "paused_only": "GET /api/v1/employment/deductions?status=paused"
+      }
+    },
+    "13_UPDATE_DEDUCTION": {
+      "endpoint": "PUT /api/v1/employment/deduction/:deductionId",
+      "description": "Update a deduction",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}",
+        "Content-Type": "application/json"
+      },
+      "payload": {
+        "value": 12,
+        "description": "Updated tax percentage from 10% to 12%"
+      },
+      "variations": {
+        "change_amount": {
+          "value": 7500,
+          "description": "Increased insurance premium"
+        },
+        "change_priority": {
+          "priority": 3,
+          "description": "Changed deduction priority"
+        },
+        "add_max_cap": {
+          "maxAmount": 25000,
+          "description": "Added monthly cap of 25k"
+        }
+      }
+    },
+    "14_PAUSE_DEDUCTION": {
+      "endpoint": "PUT /api/v1/employment/deduction/:deductionId",
+      "description": "Pause a deduction temporarily",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}",
+        "Content-Type": "application/json"
+      },
+      "payload": {
+        "status": "paused"
+      }
+    },
+    "15_RESUME_DEDUCTION": {
+      "endpoint": "PUT /api/v1/employment/deduction/:deductionId",
+      "description": "Resume a paused deduction",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}",
+        "Content-Type": "application/json"
+      },
+      "payload": {
+        "status": "active"
+      }
+    },
+    "16_DELETE_DEDUCTION": {
+      "endpoint": "DELETE /api/v1/employment/deduction/:deductionId",
+      "description": "Delete/deactivate a deduction (soft delete)",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}"
+      },
+      "note": "No body required - this is a DELETE request"
+    }
+  },
+  "PAYROLL_ENHANCED": {
+    "17_CREATE_PAYROLL_AUTO_CALCULATE": {
+      "endpoint": "POST /api/v1/billing/payroll",
+      "description": "Create payroll with automatic calculation (NEW ENHANCED VERSION)",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}",
+        "Content-Type": "application/json"
+      },
+      "payload": {
+        "userId": "693396ffc75f48bd67e6c1d5",
+        "bankId": "69333352cbc1955b402b7ee1",
+        "payPeriodStart": "2025-12-01",
+        "payPeriodEnd": "2025-12-13",
+        "paymentDue": "2025-12-15",
+        "paymentGateway": "flutterwave",
+        "narration": "December 1-13 Payroll"
+      },
+      "variations": {
+        "monthly_payroll": {
+          "userId": "693396ffc75f48bd67e6c1d5",
+          "bankId": "69333352cbc1955b402b7ee1",
+          "payPeriodStart": "2025-12-01",
+          "payPeriodEnd": "2025-12-31",
+          "paymentDue": "2025-12-31",
+          "paymentGateway": "flutterwave",
+          "narration": "December 2025 Monthly Salary"
+        },
+        "weekly_payroll": {
+          "userId": "693396ffc75f48bd67e6c1d5",
+          "bankId": "69333352cbc1955b402b7ee1",
+          "payPeriodStart": "2025-12-09",
+          "payPeriodEnd": "2025-12-15",
+          "paymentDue": "2025-12-16",
+          "paymentGateway": "flutterwave",
+          "narration": "Week of Dec 9-15"
+        },
+        "biweekly_payroll": {
+          "userId": "693396ffc75f48bd67e6c1d5",
+          "bankId": "69333352cbc1955b402b7ee1",
+          "payPeriodStart": "2025-12-01",
+          "payPeriodEnd": "2025-12-15",
+          "paymentDue": "2025-12-16",
+          "paymentGateway": "flutterwave",
+          "narration": "Bi-weekly payroll Dec 1-15"
+        }
+      },
+      "expected_response_structure": {
+        "message": "Payroll created successfully",
+        "payroll": {
+          "grossAmount": 200000,
+          "totalHours": 80,
+          "hourlyRate": 2500,
+          "currency": "NGN",
+          "deductions": [
+            {
+              "name": "Income Tax",
+              "type": "tax",
+              "calculationType": "percentage",
+              "value": 10,
+              "amount": 20000,
+              "isPreTax": false
+            }
+          ],
+          "totalDeductions": 20000,
+          "paymentAmount": 180000,
+          "paymentStatus": "scheduled"
+        },
+        "summary": {
+          "totalHours": 80,
+          "hourlyRate": 2500,
+          "grossAmount": 200000,
+          "totalDeductions": 20000,
+          "netAmount": 180000,
+          "deductionsApplied": 1
+        }
+      }
+    },
+    "18_CREATE_PAYROLL_MANUAL_OLD_WAY": {
+      "endpoint": "POST /api/v1/billing/payroll",
+      "description": "Create payroll manually (for backward compatibility - not recommended)",
+      "note": "This will FAIL if employee doesn't have a rate set. Use auto-calculate method instead.",
+      "headers": {
+        "Authorization": "Bearer {{admin_token}}",
+        "Content-Type": "application/json"
+      },
+      "payload": {
+        "userId": "693396ffc75f48bd67e6c1d5",
+        "bankId": "69333352cbc1955b402b7ee1",
+        "narration": "Manual payroll entry",
+        "paymentAmount": 500000,
+        "paymentDue": "2025-12-15",
+        "paymentStatus": "scheduled",
+        "paymentGateway": "flutterwave"
+      }
+    }
+  },
+  "COMPLETE_WORKFLOW_EXAMPLE": {
+    "SCENARIO_1_SIMPLE_EMPLOYEE": {
+      "description": "Employee with hourly rate, no deductions",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Set employee rate",
+          "endpoint": "POST /api/v1/employment/rate",
+          "payload": {
+            "userId": "693396ffc75f48bd67e6c1d5",
+            "hourlyRate": 2500,
+            "currency": "NGN",
+            "rateType": "hourly",
+            "notes": "Junior developer rate"
+          }
+        },
+        {
+          "step": 2,
+          "action": "Employee works and time entries are approved",
+          "note": "Use existing time tracking endpoints"
+        },
+        {
+          "step": 3,
+          "action": "Create payroll",
+          "endpoint": "POST /api/v1/billing/payroll",
+          "payload": {
+            "userId": "693396ffc75f48bd67e6c1d5",
+            "bankId": "69333352cbc1955b402b7ee1",
+            "payPeriodStart": "2025-12-01",
+            "payPeriodEnd": "2025-12-13",
+            "paymentDue": "2025-12-15",
+            "paymentGateway": "flutterwave"
+          },
+          "expected_calculation": "If 100 hours worked: 100 × 2500 = 250,000 (gross = net, no deductions)"
+        }
+      ]
+    },
+    "SCENARIO_2_WITH_TAX_AND_INSURANCE": {
+      "description": "Employee with rate, tax, and insurance deductions",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Set employee rate",
+          "endpoint": "POST /api/v1/employment/rate",
+          "payload": {
+            "userId": "693396ffc75f48bd67e6c1d5",
+            "hourlyRate": 3000,
+            "currency": "NGN",
+            "rateType": "hourly"
+          }
+        },
+        {
+          "step": 2,
+          "action": "Add tax deduction",
+          "endpoint": "POST /api/v1/employment/deduction",
+          "payload": {
+            "userId": "693396ffc75f48bd67e6c1d5",
+            "name": "Income Tax",
+            "deductionType": "tax",
+            "calculationType": "percentage",
+            "value": 10,
+            "priority": 1,
+            "isPreTax": false,
+            "isRecurring": true
+          }
+        },
+        {
+          "step": 3,
+          "action": "Add insurance deduction",
+          "endpoint": "POST /api/v1/employment/deduction",
+          "payload": {
+            "userId": "693396ffc75f48bd67e6c1d5",
+            "name": "Health Insurance",
+            "deductionType": "health_insurance",
+            "calculationType": "fixed_amount",
+            "value": 5000,
+            "priority": 2,
+            "isRecurring": true
+          }
+        },
+        {
+          "step": 4,
+          "action": "Create payroll",
+          "endpoint": "POST /api/v1/billing/payroll",
+          "payload": {
+            "userId": "693396ffc75f48bd67e6c1d5",
+            "bankId": "69333352cbc1955b402b7ee1",
+            "payPeriodStart": "2025-12-01",
+            "payPeriodEnd": "2025-12-31",
+            "paymentDue": "2025-12-31"
+          },
+          "expected_calculation": "If 160 hours: Gross=480,000 | Tax=48,000 | Insurance=5,000 | Net=427,000"
+        }
+      ]
+    },
+    "SCENARIO_3_WITH_LOAN_REPAYMENT": {
+      "description": "Employee with loan that auto-completes",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Set employee rate",
+          "endpoint": "POST /api/v1/employment/rate",
+          "payload": {
+            "userId": "693396ffc75f48bd67e6c1d5",
+            "hourlyRate": 2000,
+            "currency": "NGN"
+          }
+        },
+        {
+          "step": 2,
+          "action": "Add tax",
+          "endpoint": "POST /api/v1/employment/deduction",
+          "payload": {
+            "userId": "693396ffc75f48bd67e6c1d5",
+            "name": "Tax",
+            "deductionType": "tax",
+            "calculationType": "percentage",
+            "value": 7.5,
+            "priority": 1,
+            "isRecurring": true
+          }
+        },
+        {
+          "step": 3,
+          "action": "Add loan repayment",
+          "endpoint": "POST /api/v1/employment/deduction",
+          "payload": {
+            "userId": "693396ffc75f48bd67e6c1d5",
+            "name": "Equipment Loan",
+            "deductionType": "loan_repayment",
+            "calculationType": "fixed_amount",
+            "value": 10000,
+            "priority": 5,
+            "isRecurring": false,
+            "targetAmount": 50000,
+            "description": "50k loan in 5 installments"
+          }
+        },
+        {
+          "step": 4,
+          "action": "Create payroll (month 1)",
+          "endpoint": "POST /api/v1/billing/payroll",
+          "payload": {
+            "userId": "693396ffc75f48bd67e6c1d5",
+            "bankId": "69333352cbc1955b402b7ee1",
+            "payPeriodStart": "2025-12-01",
+            "payPeriodEnd": "2025-12-31"
+          },
+          "note": "Loan totalDeducted becomes 10,000"
+        },
+        {
+          "step": 5,
+          "action": "Create payroll (months 2-5)",
+          "note": "Repeat 4 more times with different pay periods",
+          "result": "After 5th payroll, loan status auto-changes to 'completed'"
+        }
+      ]
+    }
+  },
+  "ERROR_SCENARIOS_TO_TEST": {
+    "ERROR_1_NO_RATE_SET": {
+      "description": "Try to create payroll without setting employee rate first",
+      "endpoint": "POST /api/v1/billing/payroll",
+      "payload": {
+        "userId": "693396ffc75f48bd67e6c1d5",
+        "bankId": "69333352cbc1955b402b7ee1",
+        "payPeriodStart": "2025-12-01",
+        "payPeriodEnd": "2025-12-31"
+      },
+      "expected_error": {
+        "status": 404,
+        "message": "No active rate found for this employee. Please set an hourly rate first."
+      }
+    },
+    "ERROR_2_NO_APPROVED_TIME_ENTRIES": {
+      "description": "Try to create payroll when no time entries are approved",
+      "endpoint": "POST /api/v1/billing/payroll",
+      "payload": {
+        "userId": "693396ffc75f48bd67e6c1d5",
+        "bankId": "69333352cbc1955b402b7ee1",
+        "payPeriodStart": "2025-01-01",
+        "payPeriodEnd": "2025-01-31"
+      },
+      "expected_error": {
+        "status": 400,
+        "message": "No approved time entries found for this period"
+      }
+    },
+    "ERROR_3_MISSING_FIELDS": {
+      "description": "Try to create payroll without required fields",
+      "endpoint": "POST /api/v1/billing/payroll",
+      "payload": {
+        "userId": "693396ffc75f48bd67e6c1d5"
+      },
+      "expected_error": {
+        "status": 400,
+        "message": "Missing required fields: userId, bankId, payPeriodStart, payPeriodEnd"
+      }
+    },
+    "ERROR_4_EMPLOYEE_NOT_FOUND": {
+      "description": "Try to set rate for non-existent employee",
+      "endpoint": "POST /api/v1/employment/rate",
+      "payload": {
+        "userId": "000000000000000000000000",
+        "hourlyRate": 2500,
+        "currency": "NGN"
+      },
+      "expected_error": {
+        "status": 404,
+        "message": "Employee not found"
+      }
+    }
+  },
+  "NOTES": {
+    "important_ids_to_replace": [
+      "userId: Replace '693396ffc75f48bd67e6c1d5' with actual employee user ID from your database",
+      "bankId: Replace '69333352cbc1955b402b7ee1' with actual bank ID from your database",
+      "projectId: Replace '68d31429ebb9738877aa0070' with actual project ID if needed",
+      "rateId: Get from the response of 'Set Employee Rate' request",
+      "deductionId: Get from the response of 'Create Deduction' requests"
+    ],
+    "testing_order": [
+      "1. Login as admin to get token",
+      "2. Set employee rate (required)",
+      "3. Add deductions (optional)",
+      "4. Ensure employee has approved time entries for the period",
+      "5. Create payroll (will auto-calculate)",
+      "6. Review the breakdown in response",
+      "7. Trigger payment with existing endpoint"
+    ],
+    "calculation_logic": {
+      "gross": "totalHours × hourlyRate",
+      "deductions": "Applied in priority order (lower priority number first)",
+      "pre_tax": "Deducted from gross before tax",
+      "post_tax": "Deducted after pre-tax deductions",
+      "net": "gross - total_deductions"
+    }
+  }
+}

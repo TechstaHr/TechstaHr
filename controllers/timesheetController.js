@@ -50,7 +50,9 @@ const getMyTimesheets = async (req, res) => {
   try {
     const userId = req.user.id;
     const dateParam = req.query.date;
+    
     if (dateParam) {
+      // Return entries for a specific day
       const date = parseDateSafe(dateParam);
       const start = new Date(date.setHours(0,0,0,0));
       const end = new Date(date.setHours(23,59,59,999));
@@ -62,13 +64,22 @@ const getMyTimesheets = async (req, res) => {
       return res.status(200).json({ date: start.toISOString().split('T')[0], entries });
     }
 
+    // Without date parameter: return entries for the entire current month
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     
-    const entries = await TimeEntry.find({ user: userId })
+    const entries = await TimeEntry.find({ 
+      user: userId,
+      date: { $gte: startOfMonth, $lte: endOfMonth }
+    })
       .sort({ date: -1 })
-      .limit(30)
       .populate('project', 'name');
 
-    res.status(200).json({ entries });
+    res.status(200).json({ 
+      month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+      entries 
+    });
   } catch (err) {
     console.error('Error in getMyTimesheets:', err);
     res.status(500).json({ message: 'Internal server error' });
@@ -151,11 +162,25 @@ const submitTimesheet = async (req, res) => {
     const entry = await TimeEntry.findOne({ _id: entryId, user: req.user.id });
     if (!entry) return res.status(404).json({ message: 'Entry not found' });
 
-    entry.submitted = true;
+    // Check if entry has been clocked out (has endTime and totalHours)
+    if (!entry.endTime || entry.totalHours === undefined) {
+      return res.status(400).json({ 
+        message: 'Cannot submit time entry. Please clock out first.',
+        entry: {
+          id: entry._id,
+          hasEndTime: !!entry.endTime,
+          hasTotalHours: entry.totalHours !== undefined
+        }
+      });
+    }
+
+    // Update status to 'submitted' (for new payroll system compatibility)
+    entry.status = 'submitted';
+    entry.submitted = true; // Keep for backward compatibility
     entry.submittedAt = new Date();
     await entry.save();
 
-    res.json({ message: 'Timesheet submitted' });
+    res.json({ message: 'Timesheet submitted', entry });
   } catch (err) {
     console.error('Error in submitTimesheet:', err);
     res.status(500).json({ message: 'Internal server error' });
@@ -170,7 +195,21 @@ const approveTimesheet = async (req, res) => {
     const entry = await TimeEntry.findById(entryId).populate('user', 'full_name email');
     if (!entry) return res.status(404).json({ message: 'Entry not found' });
 
-    entry.approved = true;
+    // Check if entry has been clocked out (has endTime and totalHours)
+    if (!entry.endTime || entry.totalHours === undefined) {
+      return res.status(400).json({ 
+        message: 'Cannot approve time entry. Employee must clock out first.',
+        entry: {
+          id: entry._id,
+          hasEndTime: !!entry.endTime,
+          hasTotalHours: entry.totalHours !== undefined
+        }
+      });
+    }
+
+    // Update status to 'approved' (for new payroll system compatibility)
+    entry.status = 'approved';
+    entry.approved = true; // Keep for backward compatibility
     entry.approvedAt = new Date();
     entry.approvedBy = req.user.id;
     await entry.save();
