@@ -34,7 +34,6 @@ const getUserProfile = async (req, res) => {
 
         const user = await User.findById(userId)
             .select('-password -__v')
-            .populate('team', 'name');
 
         if (!user) {
             return res.status(404).json({ message: "User not found" });
