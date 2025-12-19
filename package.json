@@ -4,6 +4,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "serve": "nodemon server.js",
     "db:populate-banks": "node scripts/populateBanks.js",
     "db:fix-old-schemas": "node scripts/fix-payroll-indexes.js && node scripts/fix-billing-index.js && node scripts/migrate-payroll-schema.js"
   },
@@ -27,11 +28,13 @@
     "moment-timezone": "^0.6.0",
     "mongodb": "^6.20.0",
     "mongoose": "^8.15.0",
+    "mongoose-sequence": "^6.0.1",
     "morgan": "^1.10.0",
     "multer": "^2.0.2",
     "multer-storage-cloudinary": "^4.0.0",
     "node-cron": "^4.2.0",
     "nodemailer": "^7.0.3",
+    "nodemon": "^3.1.11",
     "npm": "^11.4.2",
     "puppeteer": "^24.15.0",
     "react": "^19.1.0",

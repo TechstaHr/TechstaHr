@@ -47,13 +47,12 @@ router.post('/charges', authenticateToken, authorizeAdmin, billingCtrl.createCha
 
 
 // ============ EMPLOYEE RATE ROUTES ============
-router.post('/rate', authenticateToken, authorizeAdmin, employmentCtrl.setEmployeeRate);
-router.get('/rate/:userId', authenticateToken, authorizeAdmin, employmentCtrl.getEmployeeRate);
-router.put('/rate/:rateId', authenticateToken, authorizeAdmin, employmentCtrl.updateEmployeeRate);
-router.get('/rates', authenticateToken, authorizeAdmin, employmentCtrl.getAllEmployeeRates);
+router.post('/rate', authenticateToken, authorizeAdmin, billingCtrl.setEmployeeRate);
+router.get('/rate', authenticateToken, billingCtrl.getEmployeeRate);
+router.delete('/rate/:id', authenticateToken, authorizeAdmin, billingCtrl.deleteEmployeeRate);
 
 // ============ DEDUCTION ROUTES ============
-router.post('/deduction', authenticateToken,authorizeAdmin, employmentCtrl.createDeduction);
+router.post('/deduction', authenticateToken, authorizeAdmin, employmentCtrl.createDeduction);
 router.get('/deductions', authenticateToken, authorizeAdmin, employmentCtrl.getAllDeductions);
 router.get('/deduction/:userId', authenticateToken, authorizeAdmin, employmentCtrl.getEmployeeDeductions);
 router.put('/deduction/:deductionId', authenticateToken, authorizeAdmin, employmentCtrl.updateDeduction);

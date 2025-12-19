@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const AutoIncrement = require('mongoose-sequence')(mongoose);
 
 // Define deduction breakdown subdocument schema explicitly
 const DeductionBreakdownSchema = new mongoose.Schema({
@@ -15,6 +16,10 @@ const DeductionBreakdownSchema = new mongoose.Schema({
 }, { _id: false }); // Don't create _id for subdocuments
 
 const PayrollSchema = new mongoose.Schema({
+  payrollId: {
+    type: Number,
+    unique: true
+  },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
@@ -24,16 +29,15 @@ const PayrollSchema = new mongoose.Schema({
   bankId: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
-    ref: 'Bank',
-    index: true
+    ref: 'Bank'
   },
   narration: { type: String, required: false },
-  paymentAmount: { 
-    type: Number, 
+  paymentAmount: {
+    type: Number,
     required: true,
     comment: 'Net amount to be paid after deductions'
   },
-  
+
   // Payroll calculation breakdown
   grossAmount: {
     type: Number,
@@ -56,7 +60,7 @@ const PayrollSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  
+
   // Pay period information
   payPeriodStart: {
     type: Date,
@@ -66,13 +70,13 @@ const PayrollSchema = new mongoose.Schema({
     type: Date,
     comment: 'End date of pay period'
   },
-  
+
   // Time entries included in this payroll
   timeEntries: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'TimeEntry'
   }],
-  
+
   paymentDue: { type: Date, required: false },
   paymentStatus: {
     type: String,
@@ -84,5 +88,11 @@ const PayrollSchema = new mongoose.Schema({
   idempotencyKey: { type: String, required: true },
   trxReference: { type: String, required: true },
 }, { timestamps: true });
+
+// Add auto-increment plugin for payrollId
+PayrollSchema.plugin(AutoIncrement, {
+  inc_field: 'payrollId',
+  start_seq: 10000
+});
 
 module.exports = mongoose.model('Payroll', PayrollSchema);

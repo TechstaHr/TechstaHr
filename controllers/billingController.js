@@ -10,6 +10,7 @@ const User = require('../models/User');
 const TimeEntry = require('../models/TimeEntry');
 const EmployeeRate = require('../models/EmployeeRate');
 const Deduction = require('../models/Deduction');
+const Project = require('../models/Project');
 const ledger = require('../utils/ledger');
 const { addPaymentMethod, initiateCharge, updateCharge: updateFlwCharge } = require('../utils/flutterwave');
 
@@ -17,328 +18,328 @@ const { addPaymentMethod, initiateCharge, updateCharge: updateFlwCharge } = requ
 const roundCurrency = (amount) => Math.round(amount * 100) / 100;
 
 const addBank = async (req, res) => {
-  try {
-    const existing = await Bank.findOne({ bankName: req.body.bankName });
-    if (existing) return res.status(409).json({ message: 'Bank already exist' });
+    try {
+        const existing = await Bank.findOne({ bankName: req.body.bankName });
+        if (existing) return res.status(409).json({ message: 'Bank already exist' });
 
-    const newBank = new Bank({...req.body});
-    console.log('New Bank Created:', newBank);
-    await newBank.save();
-    res.status(201).json({
-      message: "Bank created successfully",
-      bank: newBank,
-    });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+        const newBank = new Bank({ ...req.body });
+        console.log('New Bank Created:', newBank);
+        await newBank.save();
+        res.status(201).json({
+            message: "Bank created successfully",
+            bank: newBank,
+        });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
 };
 
 const getBank = async (req, res) => {
-  try {
-    const bank = await Bank.findById(req.params.id);
-    if (!bank) return res.status(404).json({ message: 'Bank not found' });
-    res.status(200).json(bank);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+    try {
+        const bank = await Bank.findById(req.params.id);
+        if (!bank) return res.status(404).json({ message: 'Bank not found' });
+        res.status(200).json(bank);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
 };
 
 const updateBank = async (req, res) => {
-  try {
-    const bank = await Bank.findById(req.params.id);
-    if (!bank) return res.status(404).json({ message: 'Bank not found' });
+    try {
+        const bank = await Bank.findById(req.params.id);
+        if (!bank) return res.status(404).json({ message: 'Bank not found' });
 
-    Object.assign(bank, req.body);
-    await bank.save();
-    res.status(200).json(bank);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+        Object.assign(bank, req.body);
+        await bank.save();
+        res.status(200).json(bank);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
 };
 
 const deleteBank = async (req, res) => {
-  try {
-    const bank = await Bank.findById(req.params.id);
-    if (!bank) return res.status(404).json({ message: 'Bank not found' });
+    try {
+        const bank = await Bank.findById(req.params.id);
+        if (!bank) return res.status(404).json({ message: 'Bank not found' });
 
-    await bank.remove();
-    res.status(200).json({ message: 'Bank deleted successfully' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+        await bank.remove();
+        res.status(200).json({ message: 'Bank deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
 }
 
 const getBanks = async (req, res) => {
-  try {
-    banks = await Bank.find();
-    res.status(200).json(banks);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+    try {
+        banks = await Bank.find();
+        res.status(200).json(banks);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
 };
 
 const createPayroll = async (req, res) => {
-  try {
-    const employerId = req.user.id;
-    const { 
-      userId, 
-      bankId, 
-      payPeriodStart, 
-      payPeriodEnd, 
-      paymentDue, 
-      paymentGateway,
-      narration 
-    } = req.body;
+    try {
+        const employerId = req.user.id;
+        const {
+            userId,
+            bankId,
+            payPeriodStart,
+            payPeriodEnd,
+            paymentDue,
+            paymentGateway,
+            narration
+        } = req.body;
 
-    // Validate required fields
-    if (!userId || !bankId || !payPeriodStart || !payPeriodEnd) {
-      return res.status(400).json({ 
-        message: 'Missing required fields: userId, bankId, payPeriodStart, payPeriodEnd' 
-      });
-    }
-
-    // Verify employee exists
-    const employee = await User.findById(userId);
-    if (!employee) {
-      return res.status(404).json({ message: 'Employee not found' });
-    }
-
-    // Verify bank exists
-    const bank = await Bank.findById(bankId);
-    if (!bank) {
-      return res.status(404).json({ message: 'Bank not found' });
-    }
-
-    // 1. Fetch all approved time entries for the pay period
-    const periodStart = new Date(payPeriodStart);
-    const periodEnd = new Date(payPeriodEnd);
-    periodEnd.setHours(23, 59, 59, 999);
-
-    const timeEntries = await TimeEntry.find({
-      user: userId,
-      status: 'approved',
-      date: { $gte: periodStart, $lte: periodEnd }
-    });
-
-    if (timeEntries.length === 0) {
-      return res.status(400).json({ 
-        message: 'No approved time entries found for this period',
-        period: { start: payPeriodStart, end: payPeriodEnd }
-      });
-    }
-
-    // 2. Calculate total hours
-    const totalHours = timeEntries.reduce((sum, entry) => sum + (entry.totalHours || 0), 0);
-
-    if (totalHours === 0) {
-      return res.status(400).json({ 
-        message: 'No billable hours found in approved time entries' 
-      });
-    }
-
-    // 3. Get active employee rate
-    const activeRate = await EmployeeRate.findOne({
-      userId,
-      employerId,
-      status: 'active',
-      effectiveFrom: { $lte: periodEnd }
-    }).sort({ effectiveFrom: -1 });
-
-    if (!activeRate) {
-      return res.status(404).json({ 
-        message: 'No active rate found for this employee. Please set an hourly rate first.' 
-      });
-    }
-
-    // 4. Calculate gross amount (rounded to 2 decimals)
-    const grossAmount = roundCurrency(totalHours * activeRate.hourlyRate);
-
-    // 5. Get active deductions and sort by priority
-    const activeDeductions = await Deduction.find({
-      userId,
-      employerId,
-      status: 'active',
-      effectiveFrom: { $lte: periodEnd },
-      $or: [
-        { effectiveTo: { $exists: false } },
-        { effectiveTo: { $gte: periodStart } }
-      ]
-    }).sort({ priority: 1 });
-
-    // 6. Apply deductions in order
-    let runningAmount = grossAmount;
-    const deductionBreakdown = [];
-    let totalDeductions = 0;
-
-    // Separate pre-tax and post-tax deductions
-    const preTaxDeductions = activeDeductions.filter(d => d.isPreTax);
-    const postTaxDeductions = activeDeductions.filter(d => !d.isPreTax);
-
-    // Apply pre-tax deductions first
-    for (const deduction of preTaxDeductions) {
-      const deductionAmount = roundCurrency(deduction.calculateAmount(runningAmount));
-      
-      deductionBreakdown.push({
-        deductionId: deduction._id,
-        name: deduction.name,
-        type: deduction.deductionType,
-        calculationType: deduction.calculationType,
-        value: deduction.value,
-        amount: deductionAmount,
-        isPreTax: true
-      });
-
-      runningAmount -= deductionAmount;
-      totalDeductions += deductionAmount;
-
-      // Update totalDeducted for non-recurring deductions
-      if (!deduction.isRecurring) {
-        deduction.totalDeducted += deductionAmount;
-        
-        // Mark as completed if target reached
-        if (deduction.targetAmount && deduction.totalDeducted >= deduction.targetAmount) {
-          deduction.status = 'completed';
-          deduction.effectiveTo = new Date();
+        // Validate required fields
+        if (!userId || !bankId || !payPeriodStart || !payPeriodEnd) {
+            return res.status(400).json({
+                message: 'Missing required fields: userId, bankId, payPeriodStart, payPeriodEnd'
+            });
         }
-        
-        await deduction.save();
-      }
-    }
 
-    // Apply post-tax deductions
-    for (const deduction of postTaxDeductions) {
-      const deductionAmount = roundCurrency(deduction.calculateAmount(runningAmount));
-      
-      deductionBreakdown.push({
-        deductionId: deduction._id,
-        name: deduction.name,
-        type: deduction.deductionType,
-        calculationType: deduction.calculationType,
-        value: deduction.value,
-        amount: deductionAmount,
-        isPreTax: false
-      });
-
-      runningAmount -= deductionAmount;
-      totalDeductions += deductionAmount;
-
-      // Update totalDeducted for non-recurring deductions
-      if (!deduction.isRecurring) {
-        deduction.totalDeducted += deductionAmount;
-        
-        // Mark as completed if target reached
-        if (deduction.targetAmount && deduction.totalDeducted >= deduction.targetAmount) {
-          deduction.status = 'completed';
-          deduction.effectiveTo = new Date();
+        // Verify employee exists
+        const employee = await User.findById(userId);
+        if (!employee) {
+            return res.status(404).json({ message: 'Employee not found' });
         }
-        
-        await deduction.save();
-      }
+
+        // Verify bank exists
+        const bank = await Bank.findById(bankId);
+        if (!bank) {
+            return res.status(404).json({ message: 'Bank not found' });
+        }
+
+        // 1. Fetch all approved time entries for the pay period
+        const periodStart = new Date(payPeriodStart);
+        const periodEnd = new Date(payPeriodEnd);
+        periodEnd.setHours(23, 59, 59, 999);
+
+        const timeEntries = await TimeEntry.find({
+            user: userId,
+            status: 'approved',
+            date: { $gte: periodStart, $lte: periodEnd }
+        });
+
+        if (timeEntries.length === 0) {
+            return res.status(400).json({
+                message: 'No approved time entries found for this period',
+                period: { start: payPeriodStart, end: payPeriodEnd }
+            });
+        }
+
+        // 2. Calculate total hours
+        const totalHours = timeEntries.reduce((sum, entry) => sum + (entry.totalHours || 0), 0);
+
+        if (totalHours === 0) {
+            return res.status(400).json({
+                message: 'No billable hours found in approved time entries'
+            });
+        }
+
+        // 3. Get active employee rate
+        const activeRate = await EmployeeRate.findOne({
+            userId,
+            employerId,
+            status: 'active',
+            effectiveFrom: { $lte: periodEnd }
+        }).sort({ effectiveFrom: -1 });
+
+        if (!activeRate) {
+            return res.status(404).json({
+                message: 'No active rate found for this employee. Please set an hourly rate first.'
+            });
+        }
+
+        // 4. Calculate gross amount (rounded to 2 decimals)
+        const grossAmount = roundCurrency(totalHours * activeRate.hourlyRate);
+
+        // 5. Get active deductions and sort by priority
+        const activeDeductions = await Deduction.find({
+            userId,
+            employerId,
+            status: 'active',
+            effectiveFrom: { $lte: periodEnd },
+            $or: [
+                { effectiveTo: { $exists: false } },
+                { effectiveTo: { $gte: periodStart } }
+            ]
+        }).sort({ priority: 1 });
+
+        // 6. Apply deductions in order
+        let runningAmount = grossAmount;
+        const deductionBreakdown = [];
+        let totalDeductions = 0;
+
+        // Separate pre-tax and post-tax deductions
+        const preTaxDeductions = activeDeductions.filter(d => d.isPreTax);
+        const postTaxDeductions = activeDeductions.filter(d => !d.isPreTax);
+
+        // Apply pre-tax deductions first
+        for (const deduction of preTaxDeductions) {
+            const deductionAmount = roundCurrency(deduction.calculateAmount(runningAmount));
+
+            deductionBreakdown.push({
+                deductionId: deduction._id,
+                name: deduction.name,
+                type: deduction.deductionType,
+                calculationType: deduction.calculationType,
+                value: deduction.value,
+                amount: deductionAmount,
+                isPreTax: true
+            });
+
+            runningAmount -= deductionAmount;
+            totalDeductions += deductionAmount;
+
+            // Update totalDeducted for non-recurring deductions
+            if (!deduction.isRecurring) {
+                deduction.totalDeducted += deductionAmount;
+
+                // Mark as completed if target reached
+                if (deduction.targetAmount && deduction.totalDeducted >= deduction.targetAmount) {
+                    deduction.status = 'completed';
+                    deduction.effectiveTo = new Date();
+                }
+
+                await deduction.save();
+            }
+        }
+
+        // Apply post-tax deductions
+        for (const deduction of postTaxDeductions) {
+            const deductionAmount = roundCurrency(deduction.calculateAmount(runningAmount));
+
+            deductionBreakdown.push({
+                deductionId: deduction._id,
+                name: deduction.name,
+                type: deduction.deductionType,
+                calculationType: deduction.calculationType,
+                value: deduction.value,
+                amount: deductionAmount,
+                isPreTax: false
+            });
+
+            runningAmount -= deductionAmount;
+            totalDeductions += deductionAmount;
+
+            // Update totalDeducted for non-recurring deductions
+            if (!deduction.isRecurring) {
+                deduction.totalDeducted += deductionAmount;
+
+                // Mark as completed if target reached
+                if (deduction.targetAmount && deduction.totalDeducted >= deduction.targetAmount) {
+                    deduction.status = 'completed';
+                    deduction.effectiveTo = new Date();
+                }
+
+                await deduction.save();
+            }
+        }
+
+        // 7. Calculate net amount (final payment amount) - round to 2 decimals
+        const netAmount = roundCurrency(Math.max(0, runningAmount));
+        const finalTotalDeductions = roundCurrency(totalDeductions);
+
+        // 8. Create payroll record with full breakdown
+        const newPayroll = new Payroll({
+            userId,
+            bankId,
+            narration: narration || `Payroll for ${payPeriodStart} to ${payPeriodEnd}`,
+
+            // Payment details
+            paymentAmount: netAmount,
+            paymentDue: paymentDue || new Date(),
+            paymentStatus: 'scheduled',
+            paymentGateway: paymentGateway || 'flutterwave',
+
+            // Calculation breakdown
+            grossAmount,
+            totalHours,
+            hourlyRate: activeRate.hourlyRate,
+            currency: activeRate.currency || bank.currency || 'NGN',
+            deductions: deductionBreakdown,
+            totalDeductions: finalTotalDeductions,
+
+            // Pay period
+            payPeriodStart: periodStart,
+            payPeriodEnd: periodEnd,
+
+            // Reference time entries
+            timeEntries: timeEntries.map(entry => entry._id),
+
+            // Transaction identifiers
+            traceId: new mongoose.Types.ObjectId(),
+            idempotencyKey: new mongoose.Types.ObjectId(),
+            trxReference: new mongoose.Types.ObjectId(),
+        });
+
+        await newPayroll.save();
+
+        // Populate for response
+        await newPayroll.populate([
+            { path: 'userId', select: 'full_name email' },
+            { path: 'bankId', select: 'bankName code currency' },
+            { path: 'timeEntries', select: 'date totalHours status' }
+        ]);
+
+        res.status(201).json({
+            message: 'Payroll created successfully',
+            payroll: newPayroll,
+            summary: {
+                totalHours,
+                hourlyRate: activeRate.hourlyRate,
+                grossAmount,
+                totalDeductions: finalTotalDeductions,
+                netAmount,
+                deductionsApplied: deductionBreakdown.length
+            }
+        });
+
+    } catch (err) {
+        console.error('Error creating payroll:', err);
+        res.status(500).json({ message: err.message });
     }
-
-    // 7. Calculate net amount (final payment amount) - round to 2 decimals
-    const netAmount = roundCurrency(Math.max(0, runningAmount));
-    const finalTotalDeductions = roundCurrency(totalDeductions);
-
-    // 8. Create payroll record with full breakdown
-    const newPayroll = new Payroll({
-      userId,
-      bankId,
-      narration: narration || `Payroll for ${payPeriodStart} to ${payPeriodEnd}`,
-      
-      // Payment details
-      paymentAmount: netAmount,
-      paymentDue: paymentDue || new Date(),
-      paymentStatus: 'scheduled',
-      paymentGateway: paymentGateway || 'flutterwave',
-      
-      // Calculation breakdown
-      grossAmount,
-      totalHours,
-      hourlyRate: activeRate.hourlyRate,
-      currency: activeRate.currency || bank.currency || 'NGN',
-      deductions: deductionBreakdown,
-      totalDeductions: finalTotalDeductions,
-      
-      // Pay period
-      payPeriodStart: periodStart,
-      payPeriodEnd: periodEnd,
-      
-      // Reference time entries
-      timeEntries: timeEntries.map(entry => entry._id),
-      
-      // Transaction identifiers
-      traceId: new mongoose.Types.ObjectId(),
-      idempotencyKey: new mongoose.Types.ObjectId(),
-      trxReference: new mongoose.Types.ObjectId(),
-    });
-
-    await newPayroll.save();
-
-    // Populate for response
-    await newPayroll.populate([
-      { path: 'userId', select: 'full_name email' },
-      { path: 'bankId', select: 'bankName code currency' },
-      { path: 'timeEntries', select: 'date totalHours status' }
-    ]);
-
-    res.status(201).json({
-      message: 'Payroll created successfully',
-      payroll: newPayroll,
-      summary: {
-        totalHours,
-        hourlyRate: activeRate.hourlyRate,
-        grossAmount,
-        totalDeductions: finalTotalDeductions,
-        netAmount,
-        deductionsApplied: deductionBreakdown.length
-      }
-    });
-
-  } catch (err) {
-    console.error('Error creating payroll:', err);
-    res.status(500).json({ message: err.message });
-  }
 };
 
 const updatePayroll = async (req, res) => {
-  try {
-    const existingPayroll = await Payroll.findById(req.params.id);
-    if (existingPayroll.paymentStatus === "completed" || existingPayroll.paymentStatus === "failed") {
-      res.status(403).json({ message: "Can only update scheduled payment" });
-    }
-    delete req.body.traceId;
-    delete req.body.idempotencyKey;
-    delete req.body.trxReference;
-    Object.assign(existingPayroll, req.body);
-    await existingPayroll.save();
+    try {
+        const existingPayroll = await Payroll.findById(req.params.id);
+        if (existingPayroll.paymentStatus === "completed" || existingPayroll.paymentStatus === "failed") {
+            res.status(403).json({ message: "Can only update scheduled payment" });
+        }
+        delete req.body.traceId;
+        delete req.body.idempotencyKey;
+        delete req.body.trxReference;
+        Object.assign(existingPayroll, req.body);
+        await existingPayroll.save();
 
-    res.status(200).json(existingPayroll);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+        res.status(200).json(existingPayroll);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
 };
 
 const getPayroll = async (req, res) => {
-  try {
-    const existingPayroll = await Payroll.findById(req.params.id);
-    if (!existingPayroll) return res.status(404).json({ message: 'Payroll not found' });
+    try {
+        const existingPayroll = await Payroll.findById(req.params.id);
+        if (!existingPayroll) return res.status(404).json({ message: 'Payroll not found' });
 
-    res.status(200).json(existingPayroll);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+        res.status(200).json(existingPayroll);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
 };
 
 const getAllPayroll = async (req, res) => {
-  try {
-    const existingPayroll = await Payroll.find();
-    if (!existingPayroll) return res.status(404).json({ message: 'Payroll not found' });
+    try {
+        const existingPayroll = await Payroll.find();
+        if (!existingPayroll) return res.status(404).json({ message: 'Payroll not found' });
 
-    res.status(200).json(existingPayroll);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+        res.status(200).json(existingPayroll);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
 };
 
 
@@ -346,17 +347,13 @@ const createBilling = async (req, res) => {
     try {
         // Allow admin to create/update billing for other users
         let userId;
-        if (req.user.role === 'admin' && req.body.userId) {
-            userId = req.body.userId;
-            console.log('Admin creating/updating billing for user:', userId);
-        } else {
-            userId = req.user.id;
-        }
-        
+        userId = req.user.id;
+        await BillingInfo.deleteOne({ userId });
+
         let existing = await BillingInfo.findOne({ userId });
         let billing;
         let isNewRecord = false;
-        
+
         if (existing) {
             const { userId: _, ...updateData } = req.body;
             Object.assign(existing, updateData);
@@ -372,13 +369,13 @@ const createBilling = async (req, res) => {
 
         let paymentMethod = null;
         let paymentMethodError = null;
-        
-        if (billing.bankDetail && billing.bankDetail.accountName && 
+
+        if (billing.bankDetail && billing.bankDetail.accountName &&
             billing.bankDetail.accountNumber && billing.bankDetail.bankId) {
-            
+
             try {
                 const user = await User.findById(userId).select('flw_customer_id');
-                
+
                 if (!user) {
                     console.log('User not found, skipping payment method creation');
                     paymentMethodError = 'User not found';
@@ -387,7 +384,7 @@ const createBilling = async (req, res) => {
                     paymentMethodError = 'No Flutterwave customer ID found. Please add address to your profile.';
                 } else {
                     const bank = await Bank.findById(billing.bankDetail.bankId);
-                    
+
                     if (!bank) {
                         console.log('Bank not found with ID:', billing.bankDetail.bankId);
                         paymentMethodError = 'Bank not found';
@@ -420,9 +417,9 @@ const createBilling = async (req, res) => {
                             traceId: crypto.randomBytes(16).toString('hex')
                         });
 
-                        const existingPaymentMethods = await PaymentMethod.countDocuments({ 
-                            user: userId, 
-                            is_active: true 
+                        const existingPaymentMethods = await PaymentMethod.countDocuments({
+                            user: userId,
+                            is_active: true
                         });
                         const shouldBeDefault = existingPaymentMethods === 0;
 
@@ -489,6 +486,7 @@ const updateBilling = async (req, res) => {
 
         res.json(updated);
     } catch (err) {
+        console.log(err)
         res.status(500).json({ message: err.message });
     }
 };
@@ -519,8 +517,8 @@ const createPaymentMethod = async (req, res) => {
         }
 
         if (!user.flw_customer_id) {
-            return res.status(400).json({ 
-                message: 'No Flutterwave customer ID found. Please complete your profile setup first.' 
+            return res.status(400).json({
+                message: 'No Flutterwave customer ID found. Please complete your profile setup first.'
             });
         }
 
@@ -536,15 +534,15 @@ const createPaymentMethod = async (req, res) => {
 
         // Validate type
         if (!['card', 'bank_account'].includes(type)) {
-            return res.status(400).json({ 
-                message: 'Payment method type must be either "card" or "bank_account"' 
+            return res.status(400).json({
+                message: 'Payment method type must be either "card" or "bank_account"'
             });
         }
 
         // Validate card details if type is card
         if (type === 'card' && !card) {
-            return res.status(400).json({ 
-                message: 'Card details are required for card payment method. Must include: nonce, encrypted_card_number, encrypted_expiry_month, encrypted_expiry_year, encrypted_cvv' 
+            return res.status(400).json({
+                message: 'Card details are required for card payment method. Must include: nonce, encrypted_card_number, encrypted_expiry_month, encrypted_expiry_year, encrypted_cvv'
             });
         }
 
@@ -554,10 +552,10 @@ const createPaymentMethod = async (req, res) => {
                 // Try to get bank details from billing info
                 const billingInfo = await BillingInfo.findOne({ userId })
                     .populate('bankDetail.bankId');
-                
+
                 if (!billingInfo || !billingInfo.bankDetail || !billingInfo.bankDetail.bankId) {
-                    return res.status(400).json({ 
-                        message: 'Bank account details are required. Either provide bank_account in request or ensure your billing info has bank details. Bank account must include: name, number, bank_code' 
+                    return res.status(400).json({
+                        message: 'Bank account details are required. Either provide bank_account in request or ensure your billing info has bank details. Bank account must include: name, number, bank_code'
                     });
                 }
 
@@ -576,8 +574,8 @@ const createPaymentMethod = async (req, res) => {
             } else {
                 // Validate provided bank_account
                 if (!bank_account.name || !bank_account.number || !bank_account.bank_code) {
-                    return res.status(400).json({ 
-                        message: 'Bank account details must include: name, number, bank_code' 
+                    return res.status(400).json({
+                        message: 'Bank account details must include: name, number, bank_code'
                     });
                 }
             }
@@ -595,9 +593,9 @@ const createPaymentMethod = async (req, res) => {
         });
 
         // Check if this is the user's first payment method to set as default
-        const existingPaymentMethods = await PaymentMethod.countDocuments({ 
-            user: userId, 
-            is_active: true 
+        const existingPaymentMethods = await PaymentMethod.countDocuments({
+            user: userId,
+            is_active: true
         });
         const shouldBeDefault = is_default || existingPaymentMethods === 0;
 
@@ -649,15 +647,15 @@ const createPaymentMethod = async (req, res) => {
 
     } catch (error) {
         console.error('Error adding payment method:', error);
-        
+
         // Handle specific error messages from Flutterwave utility
         if (error.message && error.message.includes('does not have a Flutterwave customer ID')) {
-            return res.status(400).json({ 
-                message: 'Please update your profile first to enable payment methods' 
+            return res.status(400).json({
+                message: 'Please update your profile first to enable payment methods'
             });
         }
 
-        res.status(500).json({ 
+        res.status(500).json({
             message: error.message || 'Failed to add payment method',
             error: error
         });
@@ -668,9 +666,9 @@ const getPaymentMethods = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const paymentMethods = await PaymentMethod.find({ 
-            user: userId, 
-            is_active: true 
+        const paymentMethods = await PaymentMethod.find({
+            user: userId,
+            is_active: true
         }).sort({ is_default: -1, createdAt: -1 });
 
         res.status(200).json({
@@ -680,7 +678,7 @@ const getPaymentMethods = async (req, res) => {
 
     } catch (error) {
         console.error('Error fetching payment methods:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             message: 'Failed to fetch payment methods',
             error: error.message
         });
@@ -693,10 +691,10 @@ const setDefaultPaymentMethod = async (req, res) => {
         const { paymentMethodId } = req.params;
 
         // Find the payment method
-        const paymentMethod = await PaymentMethod.findOne({ 
-            _id: paymentMethodId, 
-            user: userId, 
-            is_active: true 
+        const paymentMethod = await PaymentMethod.findOne({
+            _id: paymentMethodId,
+            user: userId,
+            is_active: true
         });
 
         if (!paymentMethod) {
@@ -714,7 +712,7 @@ const setDefaultPaymentMethod = async (req, res) => {
 
     } catch (error) {
         console.error('Error setting default payment method:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             message: 'Failed to update default payment method',
             error: error.message
         });
@@ -727,9 +725,9 @@ const deletePaymentMethod = async (req, res) => {
         const { paymentMethodId } = req.params;
 
         // Find the payment method
-        const paymentMethod = await PaymentMethod.findOne({ 
-            _id: paymentMethodId, 
-            user: userId 
+        const paymentMethod = await PaymentMethod.findOne({
+            _id: paymentMethodId,
+            user: userId
         });
 
         if (!paymentMethod) {
@@ -742,12 +740,12 @@ const deletePaymentMethod = async (req, res) => {
 
         // If this was the default, set another one as default
         if (paymentMethod.is_default) {
-            const anotherMethod = await PaymentMethod.findOne({ 
-                user: userId, 
+            const anotherMethod = await PaymentMethod.findOne({
+                user: userId,
                 is_active: true,
                 _id: { $ne: paymentMethodId }
             });
-            
+
             if (anotherMethod) {
                 anotherMethod.is_default = true;
                 await anotherMethod.save();
@@ -760,7 +758,7 @@ const deletePaymentMethod = async (req, res) => {
 
     } catch (error) {
         console.error('Error deleting payment method:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             message: 'Failed to delete payment method',
             error: error.message
         });
@@ -792,24 +790,24 @@ const createCharge = async (req, res) => {
 
         if (!flwPaymentMethodId) {
             // Try to use default payment method
-            const defaultPaymentMethod = await PaymentMethod.findOne({ 
-                user: userId, 
-                is_default: true, 
-                is_active: true 
+            const defaultPaymentMethod = await PaymentMethod.findOne({
+                user: userId,
+                is_default: true,
+                is_active: true
             });
-            
+
             if (!defaultPaymentMethod) {
-                return res.status(400).json({ 
-                    message: 'No payment method specified and no default payment method found' 
+                return res.status(400).json({
+                    message: 'No payment method specified and no default payment method found'
                 });
             }
-            
+
             if (defaultPaymentMethod.provider !== 'flutterwave') {
-                return res.status(400).json({ 
-                    message: 'Default payment method is not a Flutterwave payment method' 
+                return res.status(400).json({
+                    message: 'Default payment method is not a Flutterwave payment method'
                 });
             }
-            
+
             flwPaymentMethodId = defaultPaymentMethod.provider_payment_method_id;
             paymentMethodDoc = defaultPaymentMethod;
         } else {
@@ -818,27 +816,27 @@ const createCharge = async (req, res) => {
                 ? { _id: payment_method_id }
                 : { provider_payment_method_id: payment_method_id };
 
-            const paymentMethod = await PaymentMethod.findOne({ 
-                user: userId, 
+            const paymentMethod = await PaymentMethod.findOne({
+                user: userId,
                 is_active: true,
                 ...query
             });
-            
+
             if (!paymentMethod) {
-                return res.status(404).json({ 
-                    message: 'Payment method not found or does not belong to you' 
+                return res.status(404).json({
+                    message: 'Payment method not found or does not belong to you'
                 });
             }
-            
+
             if (paymentMethod.provider !== 'flutterwave') {
-                return res.status(400).json({ 
-                    message: 'This endpoint only supports Flutterwave payment methods' 
+                return res.status(400).json({
+                    message: 'This endpoint only supports Flutterwave payment methods'
                 });
             }
-            
+
             flwPaymentMethodId = paymentMethod.provider_payment_method_id;
             paymentMethodDoc = paymentMethod;
-            
+
             // Update usage stats
             paymentMethod.last_used_at = new Date();
             paymentMethod.usage_count += 1;
@@ -913,15 +911,15 @@ const createCharge = async (req, res) => {
 
     } catch (error) {
         console.error('Error initiating charge:', error);
-        
+
         // Handle specific error messages
         if (error.message && error.message.includes('does not have a Flutterwave customer ID')) {
-            return res.status(400).json({ 
-                message: 'Please update your profile first to enable payments' 
+            return res.status(400).json({
+                message: 'Please update your profile first to enable payments'
             });
         }
 
-        res.status(500).json({ 
+        res.status(500).json({
             message: error.message || 'Failed to initiate charge',
             error: error
         });
@@ -1019,13 +1017,130 @@ const updateCharge = async (req, res) => {
         });
     } catch (error) {
         console.error('Error updating charge:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             message: error.message || 'Failed to update charge',
             error
         });
     }
 }
 
+
+const setEmployeeRate = async (req, res) => {
+    try {
+        const employerId = req.user.id;
+        const {
+            userId,
+            projectId,
+            hourlyRate,
+            currency,
+            rateType,
+            effectiveFrom,
+            notes
+        } = req.body;
+
+        if (!userId || hourlyRate === undefined) {
+            return res.status(400).json({ message: 'userId and hourlyRate are required' });
+        }
+
+        // Verify the employee exists
+        const employee = await User.findById(userId);
+        if (!employee) {
+            return res.status(404).json({ message: 'Employee not found' });
+        }
+
+        // If projectId is provided, verify it exists
+        if (projectId) {
+            const project = await Project.findById(projectId);
+            if (!project) {
+                return res.status(404).json({ message: 'Project not found' });
+            }
+        }
+
+        // Deactivate existing active rate for this specific combination
+        await EmployeeRate.updateMany(
+            {
+                userId,
+                employerId,
+                projectId: projectId || null,
+                status: 'active'
+            },
+            {
+                $set: { status: 'inactive', effectiveTo: new Date() }
+            }
+        );
+
+        const newRate = new EmployeeRate({
+            userId,
+            employerId,
+            teamId: employee.team,
+            projectId: projectId || null,
+            hourlyRate,
+            currency: currency || 'NGN',
+            rateType: rateType || 'hourly',
+            effectiveFrom: effectiveFrom || new Date(),
+            notes,
+            status: 'active'
+        });
+
+        await newRate.save();
+
+        res.status(201).json({
+            message: 'Employee rate set successfully',
+            rate: newRate
+        });
+    } catch (err) {
+        console.error('Error setting employee rate:', err);
+        res.status(500).json({ message: err.message });
+    }
+};
+
+const getEmployeeRate = async (req, res) => {
+    try {
+        const employerId = req.user.id;
+        const { userId, projectId } = req.query;
+
+        if (!userId) {
+            return res.status(400).json({ message: 'userId query parameter is required' });
+        }
+
+        const rate = await EmployeeRate.findOne({
+            userId,
+            employerId,
+            projectId: projectId || null,
+            status: 'active'
+        }).sort({ effectiveFrom: -1 });
+
+        if (!rate) {
+            return res.status(404).json({ message: 'No active rate found for this employee' });
+        }
+
+        res.status(200).json(rate);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+const deleteEmployeeRate = async (req, res) => {
+    try {
+        const rateId = req.params.id;
+        const rate = await EmployeeRate.findById(rateId);
+
+        if (!rate) return res.status(404).json({ message: 'Rate not found' });
+
+        // Ensure only the employer can delete/deactivate
+        if (rate.employerId.toString() !== req.user.id && req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Unauthorized' });
+        }
+
+        rate.status = 'inactive';
+        rate.effectiveTo = new Date();
+        await rate.save();
+
+        res.status(200).json({ message: 'Rate deactivated successfully' });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
 
 module.exports = {
     createBilling,
@@ -1046,4 +1161,8 @@ module.exports = {
     deletePaymentMethod,
     createCharge,
     updateCharge,
+    setEmployeeRate,
+    getEmployeeRate,
+    deleteEmployeeRate,
 }
+

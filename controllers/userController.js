@@ -9,303 +9,319 @@ const { searchCustomer, createCustomer } = require('../utils/flutterwave');
 const crypto = require('crypto');
 
 const getAllUser = async (req, res) => {
-    try {
-        const teamId = req.user.team;
+  try {
+    const teamId = req.user.team;
 
-        const users = await User.find({ team: teamId })
-            .select('-password -otp -otpExpiresAt')
-            .populate('team', 'name')
-            .sort({ role: 1, createdAt: -1 }); 
+    const users = await User.find({ team: teamId })
+      .select('-password -otp -otpExpiresAt')
+      .populate('team', 'name')
+      .sort({ role: 1, createdAt: -1 });
 
-        res.json({ 
-            users,
-            count: users.length,
-            teamId: teamId
-        });
-    } catch (error) {
-        console.error("Error getting users:", error);
-        res.status(500).json({ message: "Internal server error", error: error.message });
-    }
+    res.json({
+      users,
+      count: users.length,
+      teamId: teamId
+    });
+  } catch (error) {
+    console.error("Error getting users:", error);
+    res.status(500).json({ message: "Internal server error", error: error.message });
+  }
 };
 
 const getUserProfile = async (req, res) => {
-    try {
-        const userId = req.user.id;
+  try {
+    const userId = req.user.id;
 
-        const user = await User.findById(userId)
-            .select('-password -__v')
+    const [user, billingInfo] = await Promise.all([
+      User.findById(userId).select('-password -__v').populate('flw_customer_id').lean(),
+      BillingInfo.findOne({ userId })
+    ]);
 
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
-        res.status(200).json(user);
-    } catch (error) {
-        console.error("Error fetching user profile:", error);
-        res.status(500).json({ message: "Internal server error" });
+    if (user && billingInfo && billingInfo.address) {
+      user.address = billingInfo.address;
     }
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json(user);
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 };
 
 const getUserDetails = async (req, res) => {
-    try {
-        const { userId } = req.params;
+  try {
+    const { userId } = req.params;
 
-        const [user, billing, wallets] = await Promise.all([
-            User.findById(userId).select('-password -otp -otpExpiresAt'),
-            BillingInfo.findOne({ userId }).populate('bankDetail.bankId'),
-            Wallet.find({ user: userId }).sort({ currency: 1 })
-        ]);
+    const [user, billing, wallets] = await Promise.all([
+      User.findById(userId).select('-password -otp -otpExpiresAt').populate('flw_customer_id'),
+      BillingInfo.findOne({ userId }).populate('bankDetail.bankId'),
+      Wallet.find({ user: userId }).sort({ currency: 1 })
+    ]);
 
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
-        let bank = null;
-        if (billing?.bankDetail?.bankId) {
-            bank = billing.bankDetail.bankId;
-        } else if (billing?.bankDetail?.bankId) {
-            bank = await Bank.findById(billing.bankDetail.bankId);
-        }
-
-        res.status(200).json({
-            user,
-            billing,
-            bank,
-            wallets
-        });
-    } catch (error) {
-        console.error("Error fetching user profile:", error);
-        res.status(500).json({ message: "Internal server error" });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
+
+    let bank = null;
+    if (billing?.bankDetail?.bankId) {
+      bank = billing.bankDetail.bankId;
+    } else if (billing?.bankDetail?.bankId) {
+      bank = await Bank.findById(billing.bankDetail.bankId);
+    }
+
+    res.status(200).json({
+      user,
+      billing,
+      bank,
+      wallets
+    });
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 };
 
 const updateUserProfile = async (req, res) => {
-    try {
-        const userId = req.user.id;
-        const updates = req.body;
+  try {
+    const userId = req.user.id;
+    const updates = req.body;
 
-        const allowedUpdates = ['full_name', 'public_name', 'role_title', 'local_time'];
-        const fieldsToUpdate = {};
+    const allowedUpdates = ['full_name', 'public_name', 'role_title', 'local_time'];
+    const fieldsToUpdate = {};
 
-        for (let key of allowedUpdates) {
-            if (updates[key] !== undefined) {
-                fieldsToUpdate[key] = updates[key];
-            }
-        }
-
-        if (req.file && req.file.path) {
-            fieldsToUpdate.avatar = req.file.path;
-        }
-
-        // Validate address if provided
-        let addressToSave = null;
-        if (updates.address) {
-            const requiredAddressFields = ['street', 'city', 'state', 'postal_code', 'country'];
-            const missingFields = requiredAddressFields.filter(field => !updates.address[field]);
-            if (missingFields.length > 0) {
-                return res.status(400).json({ 
-                    message: `Address is incomplete. Missing fields: ${missingFields.join(', ')}` 
-                });
-            }
-            addressToSave = updates.address;
-        }
-
-        // Get current user data before update
-        const currentUser = await User.findById(userId);
-        if (!currentUser) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
-        // Check if user exists in Flutterwave and create if not
-        if (!currentUser.flw_customer_id) {
-            try {
-                // Search for customer in Flutterwave
-                const searchResult = await searchCustomer({
-                    email: currentUser.email,
-                    page: 1,
-                    size: 10,
-                    traceId: crypto.randomBytes(16).toString('hex')
-                });
-
-                console.log('Flutterwave customer search result:', searchResult);
-
-                let flwCustomerId = null;
-
-                // Check if customer exists in search results
-                if (searchResult.status === 'success' && 
-                    searchResult.data && 
-                    Array.isArray(searchResult.data) && 
-                    searchResult.data.length > 0) {
-                    // Customer exists, get the ID
-                    flwCustomerId = searchResult.data[0].id;
-                    console.log(`Flutterwave customer found: ${flwCustomerId}`);
-                } else {
-                    // Customer doesn't exist, create new one
-                    // Use provided address or fall back to billing info
-                    let addressData = addressToSave;
-                    
-                    if (!addressData) {
-                        // Try to get address from existing billing info
-                        const billingInfo = await BillingInfo.findOne({ userId });
-                        if (billingInfo && billingInfo.address) {
-                            addressData = billingInfo.address;
-                        }
-                    }
-
-                    const flwData = {
-                        email: currentUser.email,
-                        address: addressData ? {
-                            city: addressData.city || "",
-                            country: addressData.country || "NG",
-                            line1: addressData.street || "",
-                            postal_code: addressData.postal_code || "",
-                            state: addressData.state || ""
-                        } : {
-                            city: "",
-                            country: "NG",
-                            line1: "",
-                            postal_code: "",
-                            state: ""
-                        },
-                        traceId: crypto.randomBytes(16).toString('hex')
-                    };
-
-                    const createResult = await createCustomer(flwData);
-                    
-                    if (createResult.status === 'success' && createResult.data?.id) {
-                        flwCustomerId = createResult.data.id;
-                        console.log(`Flutterwave customer created: ${flwCustomerId}`);
-                    }
-                }
-
-                // Update flw_customer_id if we got one
-                if (flwCustomerId) {
-                    fieldsToUpdate.flw_customer_id = flwCustomerId;
-                }
-            } catch (flwError) {
-                console.error('Flutterwave customer check/creation error:', flwError);
-                // Don't fail the profile update if Flutterwave fails
-            }
-        }
-
-        const updatedUser = await User.findByIdAndUpdate(
-            userId,
-            { $set: fieldsToUpdate },
-            { new: true, runValidators: true }
-        ).select('-password -otp -otpExpiresAt');
-
-        // Save or update address in BillingInfo if provided
-        let billingResult = null;
-        if (addressToSave) {
-            try {
-                console.log('Attempting to save address to BillingInfo for userId:', userId);
-                
-                const existingBilling = await BillingInfo.findOne({ userId });
-                
-                if (existingBilling) {
-                    existingBilling.address = addressToSave;
-                    const savedBilling = await existingBilling.save();
-                    console.log('Updated address in existing billing info:', savedBilling._id);
-                    billingResult = { created: false, id: savedBilling._id };
-                } else {
-                    const billingInfo = new BillingInfo({
-                        userId,
-                        address: addressToSave
-                    });
-                    const savedBilling = await billingInfo.save();
-                    console.log('Created new billing info with address:', savedBilling._id);
-                    billingResult = { created: true, id: savedBilling._id };
-                }
-            } catch (billingError) {
-                console.error("Error details:", {
-                    name: billingError.name,
-                    message: billingError.message,
-                    errors: billingError.errors
-                });
-                billingResult = { error: billingError.message };
-                // Continue even if billing info save fails
-            }
-        }
-
-        res.status(200).json({
-            message: "Profile updated successfully",
-            user: updatedUser,
-            addressSaved: addressToSave ? true : false,
-            billingInfo: billingResult
-        });
-    } catch (error) {
-        console.error("Error updating user profile:", error);
-        res.status(500).json({ message: "Internal server error" });
+    for (let key of allowedUpdates) {
+      if (updates[key] !== undefined) {
+        fieldsToUpdate[key] = updates[key];
+      }
     }
+
+    if (req.file && req.file.path) {
+      fieldsToUpdate.avatar = req.file.path;
+    }
+
+    // Validate address if provided
+    let addressToSave = null;
+    if (updates.address) {
+      if (typeof updates.address === 'string') {
+        try {
+          updates.address = JSON.parse(updates.address);
+        } catch (e) {
+          return res.status(400).json({ message: "Invalid address format" });
+        }
+      }
+
+      const requiredFields = ['street', 'city', 'state', 'postal_code', 'country'];
+      const missingFields = requiredFields.filter(field => !updates.address[field]);
+
+      if (missingFields.length > 0) {
+        console.log(updates.address)
+        return res.status(400).json({
+          message: `Address is incomplete. Missing fields: ${missingFields.join(', ')}`
+        });
+      }
+      addressToSave = updates.address;
+    }
+
+    // Get current user data before update
+    const currentUser = await User.findById(userId);
+    if (!currentUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Check if user exists in Flutterwave and create if not
+    if (!currentUser.flw_customer_id) {
+      try {
+        // Search for customer in Flutterwave
+        const searchResult = await searchCustomer({
+          email: currentUser.email,
+          page: 1,
+          size: 10,
+          traceId: crypto.randomBytes(16).toString('hex')
+        });
+
+        console.log('Flutterwave customer search result:', searchResult);
+
+        let flwCustomerId = null;
+
+        // Check if customer exists in search results
+        if (searchResult.status === 'success' &&
+          searchResult.data &&
+          Array.isArray(searchResult.data) &&
+          searchResult.data.length > 0) {
+          // Customer exists, get the ID
+          flwCustomerId = searchResult.data[0].id;
+          console.log(`Flutterwave customer found: ${flwCustomerId}`);
+        } else {
+          // Customer doesn't exist, create new one
+          // Use provided address or fall back to billing info
+          let addressData = addressToSave;
+
+          if (!addressData) {
+            // Try to get address from existing billing info
+            const billingInfo = await BillingInfo.findOne({ userId });
+            if (billingInfo && billingInfo.address) {
+              addressData = billingInfo.address;
+            }
+          }
+
+          const flwData = {
+            email: currentUser.email,
+            address: addressData ? {
+              city: addressData.city || "",
+              country: addressData.country || "NG",
+              line1: addressData.street || "",
+              postal_code: addressData.postal_code || "",
+              state: addressData.state || ""
+            } : {
+              city: "",
+              country: "NG",
+              line1: "",
+              postal_code: "",
+              state: ""
+            },
+            traceId: crypto.randomBytes(16).toString('hex')
+          };
+
+          const createResult = await createCustomer(flwData);
+
+          if (createResult.status === 'success' && createResult.data?.id) {
+            flwCustomerId = createResult.data.id;
+            console.log(`Flutterwave customer created: ${flwCustomerId}`);
+          }
+        }
+
+        // Update flw_customer_id if we got one
+        if (flwCustomerId) {
+          fieldsToUpdate.flw_customer_id = flwCustomerId;
+        }
+      } catch (flwError) {
+        console.error('Flutterwave customer check/creation error:', flwError.error.validation_errors);
+        // Don't fail the profile update if Flutterwave fails
+      }
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: fieldsToUpdate },
+      { new: true, runValidators: true }
+    ).select('-password -otp -otpExpiresAt');
+
+    // Save or update address in BillingInfo if provided
+    let billingResult = null;
+    if (addressToSave) {
+      try {
+        console.log('Attempting to save address to BillingInfo for userId:', userId);
+
+        const existingBilling = await BillingInfo.findOne({ userId });
+
+        if (existingBilling) {
+          existingBilling.address = addressToSave;
+          const savedBilling = await existingBilling.save();
+          console.log('Updated address in existing billing info:', savedBilling._id);
+          billingResult = { created: false, id: savedBilling._id };
+        } else {
+          const billingInfo = new BillingInfo({
+            userId,
+            address: addressToSave
+          });
+          const savedBilling = await billingInfo.save();
+          console.log('Created new billing info with address:', savedBilling._id);
+          billingResult = { created: true, id: savedBilling._id };
+        }
+      } catch (billingError) {
+        console.error("Error details:", {
+          name: billingError.name,
+          message: billingError.message,
+          errors: billingError.errors
+        });
+        billingResult = { error: billingError.message };
+        // Continue even if billing info save fails
+      }
+    }
+
+    res.status(200).json({
+      message: "Profile updated successfully",
+      user: updatedUser,
+      addressSaved: addressToSave ? true : false,
+      billingInfo: billingResult
+    });
+  } catch (error) {
+    console.error("Error updating user profile:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 };
 
 const changeUserRole = async (req, res) => {
-    const validRoles = ['admin', 'user', 'team', 'agent'];
-    const { id } = req.params;
-    const { role } = req.body;
+  const validRoles = ['admin', 'user', 'team', 'agent'];
+  const { id } = req.params;
+  const { role } = req.body;
 
-    if (!validRoles.includes(role)) {
-        return res.status(400).json({ message: 'Invalid role provided' });
+  if (!validRoles.includes(role)) {
+    return res.status(400).json({ message: 'Invalid role provided' });
+  }
+
+  try {
+    const userToUpdate = await User.findOne({ _id: id, team: req.user.team });
+
+    if (!userToUpdate) {
+      return res.status(404).json({ message: 'User not found or not in your team' });
     }
 
-    try {
-        const userToUpdate = await User.findOne({ _id: id, team: req.user.team });
+    userToUpdate.role = role;
+    await userToUpdate.save();
 
-        if (!userToUpdate) {
-            return res.status(404).json({ message: 'User not found or not in your team' });
-        }
-
-        userToUpdate.role = role;
-        await userToUpdate.save();
-
-        const updatedUser = await User.findById(id).select('-password -__v');
-        res.status(200).json({ message: 'User role updated successfully', user: updatedUser });
-    } catch (error) {
-        console.error('Error changing user role:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
+    const updatedUser = await User.findById(id).select('-password -__v');
+    res.status(200).json({ message: 'User role updated successfully', user: updatedUser });
+  } catch (error) {
+    console.error('Error changing user role:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 };
 
 const deleteUserAccount = async (req, res) => {
-    try {
-        const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-        const user = await User.findOne({ _id: id, team: req.user.team });
-        if (!user) {
-            return res.status(404).json({ message: "User not found or not in your team" });
-        }
-
-        if (user.role === 'admin') {
-            return res.status(400).json({ message: "Admin account cannot be deleted!" });
-        }
-
-        await User.findByIdAndDelete(id);
-        res.status(200).json({ message: `User account deleted successfully` });
-    } catch (error) {
-        console.error(`Error deleting user account:`, error);
-        res.status(500).json({ message: "Internal server error" });
+    const user = await User.findOne({ _id: id, team: req.user.team });
+    if (!user) {
+      return res.status(404).json({ message: "User not found or not in your team" });
     }
+
+    if (user.role === 'admin') {
+      return res.status(400).json({ message: "Admin account cannot be deleted!" });
+    }
+
+    await User.findByIdAndDelete(id);
+    res.status(200).json({ message: `User account deleted successfully` });
+  } catch (error) {
+    console.error(`Error deleting user account:`, error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 };
 
 const deleteMyAccount = async (req, res) => {
-    try {
-        const userId = req.user.id;
+  try {
+    const userId = req.user.id;
 
-        const user = await User.findById(userId);
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
-        if (user.role === 'admin') {
-            return res.status(400).json({ message: "Admin account cannot be self-deleted!" });
-        }
-
-        await User.findByIdAndDelete(userId);
-        res.status(200).json({ message: "User account deleted successfully" });
-    } catch (error) {
-        console.error("Error deleting user account:", error);
-        res.status(500).json({ message: "Internal server error" });
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
+
+    if (user.role === 'admin') {
+      return res.status(400).json({ message: "Admin account cannot be self-deleted!" });
+    }
+
+    await User.findByIdAndDelete(userId);
+    res.status(200).json({ message: "User account deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting user account:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 };
 
 const clockInOrManualEntry = async (req, res) => {
@@ -488,19 +504,19 @@ const uploadProfilePicture = async (req, res) => {
       return res.status(400).json({ message: 'No file uploaded. Provide form-data key "avatar".' });
     }
 
-    
+
     const allowed = ['image/jpeg', 'image/jpg', 'image/png'];
     if (!allowed.includes(req.file.mimetype)) {
       return res.status(400).json({ message: 'Invalid file type. Only JPG/JPEG/PNG allowed.' });
     }
 
-    
+
     const MAX_BYTES = 5 * 1024 * 1024;
     if (req.file.size && req.file.size > MAX_BYTES) {
       return res.status(400).json({ message: 'File too large. Max size is 5MB.' });
     }
 
-    
+
     const avatarUrl = req.file.path || req.file.secure_url || req.file.url || (req.file.location && req.file.location) || null;
 
     if (!avatarUrl) {
@@ -538,5 +554,5 @@ module.exports = {
   listTimezones,
   updateRegion,
   uploadProfilePicture,
-  getUserDetails 
+  getUserDetails
 };

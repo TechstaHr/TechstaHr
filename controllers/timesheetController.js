@@ -6,7 +6,7 @@ const parseDateSafe = (input) => {
   if (!input) return new Date();
   const d = new Date(input);
   if (!isNaN(d.getTime())) return d;
-  
+
   const parts = input.split('-').map(Number);
   if (parts.length === 3) {
     const [y, m, day] = parts;
@@ -17,9 +17,9 @@ const parseDateSafe = (input) => {
 
 const weekRangeForDate = (date) => {
   const d = new Date(date);
-  
+
   d.setHours(0, 0, 0, 0);
-  const day = d.getDay(); 
+  const day = d.getDay();
   const diffToMonday = (day === 0) ? -6 : (1 - day);
   const monday = new Date(d);
   monday.setDate(d.getDate() + diffToMonday);
@@ -50,12 +50,12 @@ const getMyTimesheets = async (req, res) => {
   try {
     const userId = req.user.id;
     const dateParam = req.query.date;
-    
+
     if (dateParam) {
       // Return entries for a specific day
       const date = parseDateSafe(dateParam);
-      const start = new Date(date.setHours(0,0,0,0));
-      const end = new Date(date.setHours(23,59,59,999));
+      const start = new Date(date.setHours(0, 0, 0, 0));
+      const end = new Date(date.setHours(23, 59, 59, 999));
       const entries = await TimeEntry.find({
         user: userId,
         date: { $gte: start, $lte: end }
@@ -68,17 +68,17 @@ const getMyTimesheets = async (req, res) => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    
-    const entries = await TimeEntry.find({ 
+
+    const entries = await TimeEntry.find({
       user: userId,
       date: { $gte: startOfMonth, $lte: endOfMonth }
     })
       .sort({ date: -1 })
       .populate('project', 'name');
 
-    res.status(200).json({ 
+    res.status(200).json({
       month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
-      entries 
+      entries
     });
   } catch (err) {
     console.error('Error in getMyTimesheets:', err);
@@ -92,14 +92,14 @@ const clockIn = async (req, res) => {
     const { projectId } = req.body;
     const userId = req.user.id;
 
-    
+
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     const project = await Project.findById(projectId);
     if (!project) return res.status(404).json({ message: 'Project not found' });
 
-    
+
     const existing = await TimeEntry.findOne({ user: userId, project: projectId, endTime: null });
     if (existing) return res.status(400).json({ message: 'Already clocked in for this project' });
 
@@ -133,7 +133,7 @@ const clockOut = async (req, res) => {
 
     entry.endTime = new Date();
 
-    
+
     const ms = entry.endTime - entry.startTime;
     const hours = ms / (1000 * 60 * 60);
 
@@ -164,7 +164,7 @@ const submitTimesheet = async (req, res) => {
 
     // Check if entry has been clocked out (has endTime and totalHours)
     if (!entry.endTime || entry.totalHours === undefined) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'Cannot submit time entry. Please clock out first.',
         entry: {
           id: entry._id,
@@ -189,34 +189,60 @@ const submitTimesheet = async (req, res) => {
 
 const approveTimesheet = async (req, res) => {
   try {
-    const { entryId } = req.body;
-    if (!entryId) return res.status(400).json({ message: 'entryId required' });
-
-    const entry = await TimeEntry.findById(entryId).populate('user', 'full_name email');
-    if (!entry) return res.status(404).json({ message: 'Entry not found' });
-
-    // Check if entry has been clocked out (has endTime and totalHours)
-    if (!entry.endTime || entry.totalHours === undefined) {
-      return res.status(400).json({ 
-        message: 'Cannot approve time entry. Employee must clock out first.',
-        entry: {
-          id: entry._id,
-          hasEndTime: !!entry.endTime,
-          hasTotalHours: entry.totalHours !== undefined
-        }
-      });
+    const { userId, projectId } = req.body;
+    if (!userId || !projectId) {
+      return res.status(400).json({ message: 'userId and projectId are required' });
     }
 
-    // Update status to 'approved' (for new payroll system compatibility)
-    entry.status = 'approved';
-    entry.approved = true; // Keep for backward compatibility
-    entry.approvedAt = new Date();
-    entry.approvedBy = req.user.id;
-    await entry.save();
+    // Update all 'submitted' entries for this user and project to 'approved'
+    const result = await TimeEntry.updateMany(
+      {
+        user: userId,
+        project: projectId,
+        status: 'submitted'
+      },
+      {
+        $set: {
+          status: 'approved',
+          approved: true,
+          approvedAt: new Date(),
+          approvedBy: req.user.id
+        }
+      }
+    );
 
-    res.json({ message: 'Timesheet approved', entry });
+    res.json({
+      message: result.modifiedCount > 0
+        ? `Successfully approved ${result.modifiedCount} timesheets`
+        : 'No submitted timesheets found for this user in the specified project',
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount
+    });
   } catch (err) {
     console.error('Error in approveTimesheet:', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const getSubmittedTimesheetsByProject = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
+    if (!projectId) {
+      return res.status(400).json({ message: 'Project ID is required' });
+    }
+
+    const timesheets = await TimeEntry.find({
+      project: projectId,
+      status: 'submitted'
+    })
+      .populate('user', 'full_name email')
+      .populate('project', 'name')
+      .sort({ date: -1 });
+
+    res.json(timesheets);
+  } catch (err) {
+    console.error('Error in getSubmittedTimesheetsByProject:', err);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -227,5 +253,7 @@ module.exports = {
   submitTimesheet,
   getMyTimesheets,
   approveTimesheet,
-  getAllTimesheets
+  getAllTimesheets,
+  getSubmittedTimesheetsByProject
 };
+

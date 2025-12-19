@@ -138,7 +138,7 @@ const createCustomer = async (data) => {
 
     if (data.name) payload.name = data.name;
     if (data.phone) payload.phone = data.phone;
-    
+
     const response = await axios.post(
       `${FLW_BASE_URL}/customers`,
       payload,
@@ -320,8 +320,8 @@ const addPaymentMethod = async (data) => {
     };
 
     if (type === 'card') {
-      if (!card || !card.nonce || !card.encrypted_card_number || !card.encrypted_expiry_month || 
-          !card.encrypted_expiry_year || !card.encrypted_cvv) {
+      if (!card || !card.nonce || !card.encrypted_card_number || !card.encrypted_expiry_month ||
+        !card.encrypted_expiry_year || !card.encrypted_cvv) {
         throw new Error('addPaymentMethod: Card requires nonce, encrypted_card_number, encrypted_expiry_month, encrypted_expiry_year, and encrypted_cvv');
       }
       payload.card = card;
@@ -441,7 +441,7 @@ const initiateCharge = async (data) => {
     };
 
     if (meta) payload.meta = meta;
-    
+
     // Handle authorization - auto-generate OTP code if type is otp and code not provided
     if (authorization) {
       const auth = { ...authorization };
@@ -459,13 +459,13 @@ const initiateCharge = async (data) => {
               otp: auth.otp.code
             })
           );
-          
+
           await sendEmail({
             to: user.email,
             subject: 'Your Payment Authorization Code',
             html: otpEmailHtml
           });
-          
+
           console.log('OTP email sent successfully to:', user.email);
         } catch (emailError) {
           console.error('Failed to send OTP email:', emailError.message);
@@ -474,7 +474,7 @@ const initiateCharge = async (data) => {
       }
       payload.authorization = auth;
     }
-    
+
     if (typeof recurring === 'boolean') payload.recurring = recurring;
 
     const response = await axios.post(
@@ -496,7 +496,7 @@ const initiateCharge = async (data) => {
       data: response.data.data
     };
   } catch (err) {
-    console.error('Charge initiation error:', err.response ? err.response.data : err.message);
+    console.error('Charge initiation error:', err.response ? err.response.data.error.validation_errors : err.message);
     throw err.response ? err.response.data : err;
   }
 };
