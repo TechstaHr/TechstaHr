@@ -39,7 +39,7 @@ const createFlutterwaveCustomer = async (userData) => {
             console.log(`Flutterwave customer created: ${response.data.id}`);
             return response.data.id;
         }
-        
+
         return null;
     } catch (error) {
         console.error('Error creating Flutterwave customer:', error);
@@ -59,8 +59,8 @@ const createAdmin = async (req, res) => {
         const requiredAddressFields = ['street', 'city', 'state', 'postal_code', 'country'];
         const missingFields = requiredAddressFields.filter(field => !address[field]);
         if (missingFields.length > 0) {
-            return res.status(400).json({ 
-                message: `Address is incomplete. Missing fields: ${missingFields.join(', ')}` 
+            return res.status(400).json({
+                message: `Address is incomplete. Missing fields: ${missingFields.join(', ')}`
             });
         }
     }
@@ -158,8 +158,8 @@ const createUserByAdmin = async (req, res) => {
         const requiredAddressFields = ['street', 'city', 'state', 'postal_code', 'country'];
         const missingFields = requiredAddressFields.filter(field => !address[field]);
         if (missingFields.length > 0) {
-            return res.status(400).json({ 
-                message: `Address is incomplete. Missing fields: ${missingFields.join(', ')}` 
+            return res.status(400).json({
+                message: `Address is incomplete. Missing fields: ${missingFields.join(', ')}`
             });
         }
     }
@@ -358,53 +358,53 @@ const inviteUser = async (req, res) => {
 }
 
 const resendInvite = async (req, res) => {
-  const { email, frontend_url } = req.body;
+    const { email, frontend_url } = req.body;
 
-  if (!email || !frontend_url) {
-    return res.status(400).json({ message: "Email and frontend URL are required" });
-  }
-
-  try {
-    const user = await User.findOne({ email });
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    if (!email || !frontend_url) {
+        return res.status(400).json({ message: "Email and frontend URL are required" });
     }
 
-    if (user.password) {
-      return res.status(400).json({ message: "User has already set a password" });
+    try {
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        if (user.password) {
+            return res.status(400).json({ message: "User has already set a password" });
+        }
+
+        const inviteToken = crypto.randomBytes(32).toString("hex");
+        const inviteExpiresAt = Date.now() + 1000 * 60 * 60 * 24 * 7;
+
+        user.inviteToken = inviteToken;
+        user.inviteExpiresAt = inviteExpiresAt;
+
+        await user.save();
+
+        const inviter = await User.findById(user.invitedBy);
+
+        const html = ReactDOMServer.renderToStaticMarkup(
+            InviteEmail({
+                full_name: user.full_name,
+                inviteLink: `${frontend_url}?invite=${inviteToken}`,
+                invitedBy: inviter?.full_name || "A Techstahr team member"
+            })
+        );
+
+        await sendEmail({
+            to: user.email,
+            subject: "Your Techstahr invite link (resend) 🎉",
+            html
+        });
+
+        res.status(200).json({ message: "Invitation resent successfully" });
+
+    } catch (error) {
+        console.error("Resend invite error:", error);
+        res.status(500).json({ message: "Failed to resend invite" });
     }
-
-    const inviteToken = crypto.randomBytes(32).toString("hex");
-    const inviteExpiresAt = Date.now() + 1000 * 60 * 60 * 24 * 7;
-
-    user.inviteToken = inviteToken;
-    user.inviteExpiresAt = inviteExpiresAt;
-
-    await user.save();
-
-    const inviter = await User.findById(user.invitedBy);
-
-    const html = ReactDOMServer.renderToStaticMarkup(
-      InviteEmail({
-        full_name: user.full_name,
-        inviteLink: `${frontend_url}?invite=${inviteToken}`,
-        invitedBy: inviter?.full_name || "A Techstahr team member"
-      })
-    );
-
-    await sendEmail({
-      to: user.email,
-      subject: "Your Techstahr invite link (resend) 🎉",
-      html
-    });
-
-    res.status(200).json({ message: "Invitation resent successfully" });
-
-  } catch (error) {
-    console.error("Resend invite error:", error);
-    res.status(500).json({ message: "Failed to resend invite" });
-  }
 };
 
 const signup = async (req, res) => {
@@ -419,8 +419,8 @@ const signup = async (req, res) => {
         const requiredAddressFields = ['street', 'city', 'state', 'postal_code', 'country'];
         const missingFields = requiredAddressFields.filter(field => !address[field]);
         if (missingFields.length > 0) {
-            return res.status(400).json({ 
-                message: `Address is incomplete. Missing fields: ${missingFields.join(', ')}` 
+            return res.status(400).json({
+                message: `Address is incomplete. Missing fields: ${missingFields.join(', ')}`
             });
         }
     }
@@ -547,15 +547,15 @@ const logout = async (req, res) => {
     try {
         const userId = req.user.id;
         const token = req.headers.authorization?.split(' ')[1];
-        
+
         if (!userId) {
             return res.status(401).json({ message: "Unauthorized access." });
         }
 
-        await User.findByIdAndUpdate(userId, { isOnline: false, lastLogout: new Date()});
-        await TokenBlacklist.create({ 
+        await User.findByIdAndUpdate(userId, { isOnline: false, lastLogout: new Date() });
+        await TokenBlacklist.create({
             userId,
-            token, 
+            token,
             expiresAt: req.user.exp * 1000
         });
         res.status(200).json({ message: "Logout successful", clearToken: true });
@@ -607,8 +607,8 @@ const verifyOtp = async (req, res) => {
             return res.status(400).json({ message: "Invalid or expired OTP" });
         }
 
-        user.otp = null;
-        user.otpExpiresAt = null;
+        // user.otp = null;
+        // user.otpExpiresAt = null;
         await user.save();
 
         res.status(200).json({ message: "OTP verified successfully" });
@@ -619,36 +619,36 @@ const verifyOtp = async (req, res) => {
 };
 
 const setPassword = async (req, res) => {
-  const { token } = req.query;
-  const { password } = req.body;
+    const { token } = req.query;
+    const { password } = req.body;
 
-  try {
-    if (!token || !password) {
-      return res.status(400).json({ message: "Token and password are required" });
+    try {
+        if (!token || !password) {
+            return res.status(400).json({ message: "Token and password are required" });
+        }
+
+        const user = await User.findOne({
+            inviteToken: token,
+            inviteExpiresAt: { $gt: Date.now() }
+        });
+
+        if (!user) {
+            return res.status(400).json({ message: "Invalid or expired invite token" });
+        }
+
+        user.password = await hashPassword(password);
+
+        user.inviteToken = undefined;
+        user.inviteExpiresAt = undefined;
+
+        await user.save();
+
+        res.status(200).json({ message: "Password set successfully. You can now log in." });
+
+    } catch (error) {
+        console.error("Set password error:", error);
+        res.status(500).json({ message: "Internal server error" });
     }
-
-    const user = await User.findOne({
-      inviteToken: token,
-      inviteExpiresAt: { $gt: Date.now() }
-    });
-
-    if (!user) {
-      return res.status(400).json({ message: "Invalid or expired invite token" });
-    }
-
-    user.password = await hashPassword(password);
-
-    user.inviteToken = undefined;
-    user.inviteExpiresAt = undefined;
-
-    await user.save();
-
-    res.status(200).json({ message: "Password set successfully. You can now log in." });
-
-  } catch (error) {
-    console.error("Set password error:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
 };
 
 const updatePassword = async (req, res) => {
@@ -658,7 +658,7 @@ const updatePassword = async (req, res) => {
         if (!userId) {
             return res.status(401).json({ message: "Unauthorized access." });
         }
-        
+
         const user = await User.findById(userId);
         if (!user) return res.status(404).json({ message: "User not found" });
 
@@ -679,38 +679,38 @@ const updatePassword = async (req, res) => {
 };
 
 const forgotPassword = async (req, res) => {
-  const { email } = req.body;
+    const { email } = req.body;
 
-  try {
-    if (!email) {
-      return res.status(400).json({ message: "Email is required" });
+    try {
+        if (!email) {
+            return res.status(400).json({ message: "Email is required" });
+        }
+
+        const user = await User.findOne({ email });
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+        user.otp = otp;
+        user.otpExpiresAt = otpExpiresAt;
+        await user.save();
+
+        const html = ReactDOMServer.renderToStaticMarkup(
+            OtpEmail({ full_name: user.full_name || 'User', otp })
+        );
+
+        await sendEmail({
+            to: email,
+            subject: "Reset Your Techstahr Password",
+            html,
+        });
+
+        res.status(200).json({ message: "OTP sent to your email" });
+    } catch (error) {
+        console.error("Error in forgotPassword:", error);
+        res.status(500).json({ message: "Internal server error" });
     }
-
-    const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-    user.otp = otp;
-    user.otpExpiresAt = otpExpiresAt;
-    await user.save();
-
-    const html = ReactDOMServer.renderToStaticMarkup(
-      OtpEmail({ full_name: user.full_name || 'User', otp })
-    );
-
-    await sendEmail({
-      to: email,
-      subject: "Reset Your Techstahr Password",
-      html,
-    });
-
-    res.status(200).json({ message: "OTP sent to your email" });
-  } catch (error) {
-    console.error("Error in forgotPassword:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
 };
 
 const resetPassword = async (req, res) => {
