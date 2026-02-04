@@ -199,7 +199,7 @@ const updateUserProfile = async (req, res) => {
           fieldsToUpdate.flw_customer_id = flwCustomerId;
         }
       } catch (flwError) {
-        console.error('Flutterwave customer check/creation error:', flwError.error.validation_errors);
+        console.error('Flutterwave customer check/creation error:', flwError?.error?.validation_errors || flwError?.message || flwError);
         // Don't fail the profile update if Flutterwave fails
       }
     }
