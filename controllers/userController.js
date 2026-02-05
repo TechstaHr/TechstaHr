@@ -187,7 +187,7 @@ const updateUserProfile = async (req, res) => {
           };
 
           const createResult = await createCustomer(flwData);
-
+          console.log('Flutterwave customer creation result:', createResult);
           if (createResult.status === 'success' && createResult.data?.id) {
             flwCustomerId = createResult.data.id;
             console.log(`Flutterwave customer created: ${flwCustomerId}`);
